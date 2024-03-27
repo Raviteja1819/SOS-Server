@@ -1,596 +1,518 @@
-const fibaseDb = require('./firebase/index.js');
+const cluster = require('cluster');
+const numCPUs = require('os').cpus().length;
 const express = require('express');
 const cors = require('cors');
-const port = require('./port.js')
-var app = express()
+const bodyParser = require('body-parser');
+const mysql = require('mysql2');
+const app = express();
 
-app.use(cors())
+if (cluster.isMaster) {
+  console.log(`Master ${process.pid} is running`);
 
-app.use(express.json())
+  // Fork workers
+  for (let i = 0; i < numCPUs; i++) {
+    cluster.fork();
+  }
 
-//aid-app@aid-project-af0a9.iam.gserviceaccount.com
+  cluster.on('exit', (worker, code, signal) => {
+    console.log(`Worker ${worker.process.pid} died`);
+    console.log('Forking a new worker...');
+    cluster.fork();
+  });
+} else {
+  const app = express();
 
-app.use(express.urlencoded({
-    extended: false
-}));
+  // Middleware
+  app.use(cors());
+  app.use(bodyParser.json());
+  const connection = mysql.createConnection({
+    host: '45.112.49.217',
+    user: 'root',
+    password: 'password',
+    database: 'aid'
+  });
+  // Connect to MySQL
+  connection.connect((err) => {
+    if (err) {
+      console.error('Error connecting to database: ', err);
+      return;
+    }
+    console.log('Connected to MySQL database.');
+  });
+  // Function to generate userID
+  function generateUserID() {
+    const timestamp = Date.now().toString(36);
+    const randomChars = Math.random().toString(36).substring(2);
+    const userID = timestamp + randomChars;
+    return userID.substring(0, 28).padEnd(28, '0');
+  }
+//signup
+app.post('/signup', (req, res) => {
+  const {
+    firstName,
+    lastName,
+    mobileNumber,
+    email,
+    password,
+    dateOfBirth,
+    age,
+    gender,
+    bloodGroup,
+    address,
+    emergencyContact1,
+    emergencyContact2,
+    emergencyContact3,
+    alternateNumber,
+    pincode,
+    confirmPassword,
+    coordinatesLatitude,
+    coordinatesLongitude
+  } = req.body;
 
-app.get("/", (req, res) => {
-    console.log("Hello threre");
-    res.send(`<!DOCTYPE html>
-    <html>
-    <style>
-    body, html {
-      height: 100%;
-      margin: 0;
-    }
-    
-    .bgimg {
-      background-image: url('https://png.pngtree.com/thumb_back/fh260/background/20211031/pngtree-abstract-bg-image_914283.png');
-      height: 100%;
-      background-position: center;
-      background-size: cover;
-      position: relative;
-      color: white;
-      font-family: "Courier New", Courier, monospace;
-      font-size: 25px;
-    }
-    
-    .topleft {
-      position: absolute;
-      top: 0;
-      left: 16px;
-    }
-    
-    .bottomleft {
-      position: absolute;
-      bottom: 0;
-      left: 16px;
-    }
-    
-    .middle {
-      position: absolute;
-      top: 50%;
-      left: 50%;
-      transform: translate(-50%, -50%);
-      text-align: center;
-    }
-    
-    hr {
-      margin: auto;
-      width: 40%;
-    }
-    </style>
-    <body>
-    
-    <div class="bgimg">
-      <div class="topleft">
-        <p>Aid Server</p>
-      </div>
-      <div class="middle">
-        <h1>Sucessfully Hosted</h1>
-        <hr>
-        <!-- <p id="demo" style="font-size:30px"></p> -->
-      </div>
-      
-    </div>
-    
-    <script>
-    // Set the date we're counting down to
-    var countDownDate = new Date("Jan 5, 2024 15:37:25").getTime();
-    
-    // Update the count down every 1 second
-    var countdownfunction = setInterval(function() {
-    
-      // Get todays date and time
-      var now = new Date().getTime();
-      
-      // Find the distance between now an the count down date
-      var distance = countDownDate - now;
-      
-      // Time calculations for days, hours, minutes and seconds
-      var days = Math.floor(distance / (1000 * 60 * 60 * 24));
-      var hours = Math.floor((distance % (1000 * 60 * 60 * 24)) / (1000 * 60 * 60));
-      var minutes = Math.floor((distance % (1000 * 60 * 60)) / (1000 * 60));
-      var seconds = Math.floor((distance % (1000 * 60)) / 1000);
-      
-      // Output the result in an element with id="demo"
-      document.getElementById("demo").innerHTML = days + "d " + hours + "h "
-      + minutes + "m " + seconds + "s ";
-      
-      // If the count down is over, write some text 
-      if (distance < 0) {
-        clearInterval(countdownfunction);
-        document.getElementById("demo").innerHTML = "EXPIRED";
+  // Check if all required fields are provided
+  if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !emergencyContact3  || !alternateNumber || !pincode || !confirmPassword || !coordinatesLatitude || !coordinatesLongitude) {
+      console.log(!firstName,!lastName,!mobileNumber, !email,!password,!dateOfBirth,!age , !gender , !bloodGroup , !address, !emergencyContact1 ,!emergencyContact2,!emergencyContact3 , !alternateNumber , !pincode , !confirmPassword , !coordinatesLatitude , !coordinatesLongitude);
+      return res.status(400).send('All fields are required');
+  }
+
+  // Check if password and confirmPassword match
+  if (password !== confirmPassword) {
+    return res.status(400).send('Password and confirm password do not match');
+  }
+  // Generate 28-character userID
+  const userID = generateUserID();
+  console.log('Generated UserID:', userID);
+
+  // Insert user details into NewProfileSignups table
+  pool.query(
+    'INSERT INTO signup (firstName, lastName, mobileNumber, email, password, dateOfBirth, age, gender, bloodGroup, address, userID, emergencyContact1,emergencyContact2,emergencyContact3,alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude , confirmPassword) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?,?, ?, ?)',
+    [firstName, lastName, mobileNumber, email, password, dateOfBirth, age, gender, bloodGroup, address, userID,emergencyContact1,emergencyContact2,emergencyContact3, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude , confirmPassword],
+    (error, results) => {
+      if (error) {
+        console.error('Error inserting user details into signup:', error);
+        return res.status(500).send('Internal Server Error');
       }
-    }, 1000);
-    </script>
-    
-    </body>
-    </html>
-    
-    `)
-})
-
-app.get("/users", async(req, res) => {
-    var userId = req.headers["auth"]
-    var users = [];
-    var data = await fibaseDb.collection("users").doc(userId).get()
-    await fibaseDb.collection('users').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                users.push(doc.data())
-                return doc.data();
-            });
-        });
-
-    res.send({
-        "data": {
-            "single-user": data.data(),
-            "all-users": users
-        }
-    })
-})
-app.get("/callbacks", async(req, res) => {
-    var userId = req.headers["auth"]
-    var users = [];
-    await fibaseDb.collection('call_back_req').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                users.push(doc.data())
-                return doc.data();
-            });
-        });
-
-    res.send({
-        "data": {
-            "call_back_req": users
-        }
-    })
-})
-app.post('/anonymous', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-        "date": req.body["date"],
-        "time": req.body["time"],
-        "place": req.body["place"],
-        "subject": req.body["subject"],
-        "description": req.body["description"]
+      res.status(201).json({ message: 'Account created successfully', userID });
     }
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('anonymous').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("forms").doc(userId).collection("anonymous").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "Added data",
-            "docId": docId,
-            "all-reports": docId,
-            "path": `forms/${userId}/anonymous/${docId}`,
-        })
-    })
+  );
+});
+  // Login route
+  app.post('/login', (req, res) => {
+    const { email, password } = req.body;
 
-})
+    const query = 'SELECT * FROM signup WHERE email = ? AND password = ?';
+    req.mysql.query(query, [email, password], (err, results) => {
+      if (err) {
+        console.error('Error logging in:', err);
+        res.status(500).json({ message: 'Internal server error' });
+        return;
+      }
 
-app.post('/bloodrequirment', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-        "date": req.body["date"],
-        "name": req.body["name"],
-        "hospitalName": req.body["hospital_name"],
-        "hospitalAddress": req.body["hospital_address"],
-        "bloodType": req.body["blood_type"],
-        "email": req.body["email"],
-        "location": req.body["location"],
-        "purposeOfBlood": req.body["purposeOfBlood"]
+      if (results.length === 0) {
+        res.status(401).json({ message: 'Invalid email or password' });
+      } else {
+        res.status(200).json({ message: 'Login successful', user: results[0] });
+      }
+    });
+  });
+
+  // Route to get all users
+  app.get('/users', (req, res) => {
+    const query = 'SELECT * FROM signup';
+    req.mysql.query(query, (err, results) => {
+      if (err) {
+        console.error('Error fetching users:', err);
+        res.status(500).json({ message: 'Internal server error' });
+        return;
+      }
+      res.status(200).json(results);
+    });
+  });
+
+  // Route to get a user by email
+  app.get('/user/:email', (req, res) => {
+    const userEmail = req.params.email;
+    const query = 'SELECT * FROM NewProfileSignups WHERE email = ?';
+    req.mysql.query(query, [userEmail], (err, results) => {
+      if (err) {
+        console.error('Error fetching user:', err);
+        res.status(500).json({ message: 'Internal server error' });
+        return;
+      }
+      if (results.length === 0) {
+        res.status(404).json({ message: 'User not found' });
+      } else {
+        res.status(200).json(results[0]);
+      }
+    });
+  });
+// View profile page
+app.get('/profile/:email', (req, res) => {
+  const userEmail = req.params.email;
+  const query = 'SELECT * FROM signup WHERE email = ?';
+  connection.query(query, [userEmail], (err, results) => {
+      if (err) {
+          console.error('Error fetching user profile:', err);
+          res.status(500).json({ message: 'Internal server error' });
+          return;
+      }
+      if (results.length === 0) {
+          res.status(404).json({ message: 'User not found' });
+      } else {
+          res.status(200).json(results[0]);
+      }
+  });
+});
+// change password
+let userData = {
+  username: 'user',
+  password: 'password' 
+};
+app.post('/change-password', (req, res) => {
+  try {
+      const { oldPassword, newPassword, confirmPassword } = req.body;
+
+      if (!oldPassword || !newPassword || !confirmPassword) {
+          return res.status(400).json({ error: "Old password, new password, and confirm password are required" });
+      }
+
+      if (newPassword !== confirmPassword) {
+          return res.status(400).json({ error: "New password and confirm password don't match" });
+      }
+
+      if (userData.password !== oldPassword) {
+          return res.status(400).json({ error: "Old password is incorrect" });
+      }
+
+      userData.password = newPassword;
+      console.log("Password changed successfully");
+
+      res.json({ message: 'Password changed successfully' });
+  } catch (error) {
+      console.error('Error:', error);
+      res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
+connection.connect((err) => {
+  if (err) {
+    console.error('Error connecting to database: ', err);
+    return;
+  }
+  console.log('Connected to MySQL database.');
+});
+// Define the validateFields middleware functionfunction validateFields(req, res, next) {
+  function validateFields(req, res, next) {
+    const { Name, mobileNumber, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+    if (!Name || !mobileNumber || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
+      return res.status(400).json({ message: 'All fields are required' });
     }
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('blood requirement').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("forms").doc(userId).collection("blood requirement").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "Added data",
-            "total": docId,
-            "path": `forms/${userId}/blood requirement/${docId}`,
-        })
-    })
+    // If all fields are present, call next() to proceed to the next middleware/route handler
+    next();
+  }
+// POST endpoint to handle blood checkup creation
+function validateFields(req, res, next) {
+  const { Name, mobileNumber, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+  if (!Name || !mobileNumber || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
+    return res.status(400).json({ message: 'All fields are required' });
+  }
+  next();
+}
+}
+app.post('/bloodcheckup', validateFields, (req, res) => {
+  const { Name, mobileNumber, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
 
-})
-
-app.post('/bloodemergency', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-
-        "name": req.body["name"],
-        "hospitalName": req.body["hospital_name"],
-        "hospitalAddress": req.body["hospital_address"],
-        "bloodType": req.body["blood_type"],
-        "email": req.body["email"],
-        "location": req.body["location"],
-        "purposeOfBlood": req.body["purposeOfBlood"]
+  // Insert blood checkup data into the database
+  pool.query(
+    'INSERT INTO bloodCheckup (name, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [Name, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude],
+    (error, result) => {
+      if (error) {
+        console.error('Error inserting details into bloodCheckup:', error);
+        return res.status(500).send('Internal Server Error');
+      }
+  
+      // Retrieve the auto-generated userId and send response
+      const userId = result.insertId;
+      res.status(201).json({ userId, message: 'Blood checkup created successfully' });
     }
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('blood emergency').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("forms").doc(userId).collection("blood emergency").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "Added data",
-            "total": docId,
-            "path": `forms/${userId}/blood emergency/${docId}`,
-        })
-    })
+  );
+});
 
-})
+// GET endpoint to retrieve blood checkup by ID
+app.get('/bloodcheckup/:id', (req, res) => {
+  const id = req.params.id;
 
 
-app.post('/bloodcheckup', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-
-        "name": req.body["name"],
-        "bloodType": req.body["blood_type"],
-        "email": req.body["email"],
-        "mobile": req.body["mobile"],
-        "place": req.body["place"],
-        "pincode": req.body["pincode"]
-    }
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('blood checkup').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("forms").doc(userId).collection("blood checkup").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "Added data",
-            "total": docId,
-            "path": `forms/${userId}/blood checkup/${docId}`,
-        })
-    })
-
-})
-
-
-app.post('/callback', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-        "name": req.body["name"],
-        "mobile": req.body["mobile"],
-        "date": req.body["date"],
-        "time": req.body["time"]
-    }
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('call back').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("forms").doc(userId).collection("call back").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "We will contact you soon",
-            "tatal": docId,
-            "path": `forms/${userId}/callback/${docId}`,
-        })
-    })
-
-})
-
-app.get('/callback', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('call back').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    res.send({
-        "message": "Sucessfully Retrived",
-        "requests": anonymusReports
-    })
-
-})
-
-app.post('/issuereport', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-        "date": req.body["date"],
-        "time": req.body["time"],
-        "email": req.body["email"],
-        "mobile": req.body["mobile"],
-        "subject": req.body["subject"],
-        "description": req.body["description"]
-    }
-    var anonymusReports = []
-    await fibaseDb.collection('forms').doc(userId).collection('report your issue').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("forms").doc(userId).collection("report your issue").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "Added data",
-            "total": docId,
-            "path": `forms/${userId}/report your issue/${docId}`,
-        })
-    })
-
-})
-
-app.get('/supporters', async(req, res) => {
-    try {
-        console.log(2)
-        var a = []
-        await fibaseDb.collection('supporters').get()
-            .then(querySnapshot => {
-                querySnapshot.docs.map(doc => {
-                    // console.log('LOG 1', doc.data());
-                    //anonymusReports.push(doc.data())
-                    a.push(doc.data())
-
-                    return doc.data();
-
-                });
-
-            });
-        if (a.length == 0) {
-            res.send({
-                "message": "No supporters found"
-            })
-        } else {
-            res.send({
-                "supporters": a,
-            })
-        }
-        console.log(3)
-
-    } catch (error) {
-        console.log("1")
-        res.send({
-            "message": error,
-            "message2": error.code,
-        })
-    }
-})
-
-app.post('/solvedCases', async(req, res) => {
-    var userId = req.headers["auth"]
-    console.log(userId)
-    var data = {
-        "name": req.body["name"],
-        "date": req.body["date"],
-        "time": req.body["time"],
-        "email": req.body["email"],
-        "mobile": req.body["mobile"],
-        "subject": req.body["subject"],
-        "description": req.body["description"]
-    }
-    var anonymusReports = []
-    await fibaseDb.collection('solved Cases').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                anonymusReports.push(doc.data())
-                return doc.data();
-            });
-        });
-    console.log(anonymusReports.length)
-    var docId = anonymusReports.length + 1
-    console.log(docId)
-    await fibaseDb.collection("solved Cases").doc(docId.toString()).set(data).then(() => {
-        res.send({
-            "message": "Added data",
-            "total": docId,
-            "path": `/solved Cases/${docId}`,
-        })
-    })
-
-})
-
-
-app.get('/solvedCases', async(req, res) => {
-    try {
-        console.log(2)
-        var a = []
-        await fibaseDb.collection('solved Cases').get()
-            .then(querySnapshot => {
-                querySnapshot.docs.map(doc => {
-                    // console.log('LOG 1', doc.data());
-                    //anonymusReports.push(doc.data())
-                    a.push(doc.data())
-                        // res.send({
-                        //     a,
-                        // })
-                    return doc.data();
-
-                });
-
-            });
-        if (a.length == 0) {
-            
-            res.send({
-                "status":204,
-                "message": "No Solved Cases found",
-                "data":[]
-            })
-        } else {
-            
-            res.send({
-                "status":200,
-                "message": "Solved Cases found",
-                "data":a,
-            })
-        }
-        console.log(3)
-
-    } catch (error) {
-        console.log("1")
-        res.send({
-            "message": error,
-            "message2": error.code,
-        })
-    }
-})
-
-app.get('/partners', async(req, res) => {
-    try {
-        console.log(2)
-        var a = []
-        await fibaseDb.collection('partners').get()
-            .then(querySnapshot => {
-                querySnapshot.docs.map(doc => {
-                    // console.log('LOG 1', doc.data());
-                    //anonymusReports.push(doc.data())
-                    a.push(doc.data())
-
-                    return doc.data();
-
-                });
-
-            });
-        if (a.length == 0) {
-            res.send({
-                "message": "No partners found"
-            })
-        } else {
-            res.send({
-                "partners": a,
-            })
-        }
-        console.log(3)
-
-    } catch (error) {
-        console.log("1")
-        res.send({
-            "message": error,
-            "message2": error.code,
-        })
-    }
-})
-
-
-app.get('/dashboard', async(req, res) => {
-
-})
-
-// trails on dummy collectiom 
-app.get('/dummy', async(req, res) => {
-    var userId = req.headers["auth"]
-    var names = [];
-    console.log(userId)
-    var data = await fibaseDb.collection("dummy").doc(userId).get()
-    await fibaseDb.collection('dummy').get()
-        .then(querySnapshot => {
-            querySnapshot.docs.map(doc => {
-                // console.log('LOG 1', doc.data());
-                names.push(doc.data())
-                return doc.data();
-            });
-        });
-    
-    res.send({
-        "data": {
-            "single-user": data.data(),
-            "all-names": names
-        }
-    })
-    
-})
-
-app.post('/dummy',async(req,res)=>
-{
-
-    try {
-        // Get the user ID from headers
-        var userId = req.headers["auth"];
-        console.log(userId);
-        // Extract the name from the request body
-        var name = req.body["name"];
-
-        if (!userId || !name) {
-            return res.status(400).json({ error: 'User ID and name are required in the request.' });
-        }
-
-        // Create data object with the name
-        var data = {
-            "name": name
-        };
-
-        // Add a new document to the "dummy" collection with the provided user ID
-        await fibaseDb.collection("dummy").doc(userId).set(data);
-
-        res.status(201).json({ message: 'Document created successfully', data });
-    } catch (error) {
-        console.error('Error creating document:', error);
-        res.status(500).json({ error: 'Internal server error' });
+  pool.query('SELECT * FROM bloodCheckup WHERE id = ?', id, (err, results) => {
+    if (err) {
+      console.error('Error retrieving blood checkup:', err);
+      return res.status(500).json({ message: 'Error retrieving blood checkup' });
     }
 
-})
+    // If blood checkup not found, return 404
+    if (results.length === 0) {
+      return res.status(404).json({ message: 'Blood checkup not found' });
+    }
 
-// my code 
+    // Send the retrieved blood checkup data in the response
+    const bloodCheckup = results[0];
+    res.json(bloodCheckup);
+  });
+});
 
-app.post('/signup',async(req,res)=>
-{
-    
-})
+/// Blood Requirements
 
-console.log(port);
-app.listen(port);
+app.post('/blood-requirements', async (req, res) => {
+  const { userId, patientName, date, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, coordinatesLatitude, coordinatesLongitude } = req.body;
+
+  if (!userId || !patientName || !date || !bloodType || !mobileNumber || !hospitalName || !hospitalAddress || !purposeOfBlood || !pincode || !coordinatesLatitude || !coordinatesLongitude) {
+      return res.status(400).send('All fields are required');
+  }
+
+  try {
+      // Insert blood requirement into BloodRequirement table
+      await pool.query(
+          'INSERT INTO BloodRequirement (userId, patientName, date, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+          [userId, patientName, date, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, coordinatesLatitude, coordinatesLongitude]
+      );
+      res.status(201).send('Blood requirement created');
+  } catch (error) {
+      console.error('Error creating blood requirement:', error);
+      res.status(500).send('Internal Server Error');
+  }
+});
+app.get('/blood-requirements', async (req, res) => {
+  try {
+      // Retrieve all blood requirements from BloodRequirement table
+      const bloodRequirements = await pool.query('SELECT * FROM BloodRequirement');
+      res.json(bloodRequirements);
+  } catch (error) {
+      console.error('Error retrieving blood requirements:', error);
+      res.status(500).send('Internal Server Error');
+  }
+});
+
+// Callback requests
+let callbacks = [];
+
+app.post('/callback', (req, res) => {
+    const { Date, Time, mobileNumber, subject, topictospeakabout } = req.body;
+
+    if (!Date || !Time || !mobileNumber || !subject || !topictospeakabout) {
+        return res.status(400).send('All fields are required');
+    }
+
+    // Here you can handle the callback request data as per your requirement
+    callbacks.push({ Date, Time, mobileNumber, subject, topictospeakabout });
+
+    res.status(201).send('Callback request received');
+});
+
+app.get('/callbacks', (req, res) => {
+    res.json(callbacks);
+});
+//  emergency contacts
+// Initialize emergencyContacts as an object
+let emergencyContacts = {};
+
+// Handle adding emergency contacts
+const pool = mysql.createPool({
+  host: '45.112.49.217',
+  port:3306,
+  user: 'root',
+  password: 'password',
+  database: 'aid',
+  waitForConnections: true,
+  connectionLimit: 10,
+  queueLimit: 0
+});
+
+// Endpoint to add emergency contact
+app.post('/add-contact/:person', (req, res) => {
+  const userId = req.params.person;
+  const { name, relation, mobilenumber } = req.body;
+
+  if (!name || !relation || !mobilenumber) {
+      return res.status(400).json({ error: 'Name, Relation, and Phone Number are required' });
+  }
+
+  // Insert contact information into MySQL database
+  const query = 'INSERT INTO EmergencyContacts (userId, name, relation, mobilenumber) VALUES (?, ?, ?, ?)';
+  pool.query(query, [userId, name, relation, mobilenumber], (err, results) => {
+      if (err) {
+          console.error('Error adding emergency contact:', err);
+          return res.status(500).json({ error: 'Internal server error' });
+      }
+      res.status(201).json({ message: `Emergency contact added for ${userId}` });
+  });
+});
+
+// Retrieve emergency contacts for a person
+app.get('/contacts/:person', (req, res) => {
+    const person = req.params.person;
+
+    // Check if the person exists in emergencyContacts and if they have any emergency contacts
+    if (!emergencyContacts[person] || emergencyContacts[person].length === 0) {
+        return res.status(404).json({ error: 'Person not found or no emergency contacts available' });
+    }
+
+    // Return the emergency contacts for the specified person
+    res.json(emergencyContacts[person]);
+});
+
+
+//report an issue
+app.post('/report', (req, res) => {
+  const { Date, Time, email, mobileNumber, subject, explaininBrief } = req.body;
+
+  if (!Date || !Time || !email || !mobileNumber || !subject || !explaininBrief) {
+      return res.status(400).send('All fields are required');
+  }
+
+  // Validate date 
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(Date)) {
+      return res.status(400).send('Invalid date format. Date should be in YYYY-MM-DD format');
+  }
+
+  // Validate time 
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  if (!timeRegex.test(Time)) {
+      return res.status(400).send('Invalid time format. Time should be in HH:MM format (24-hour)');
+  }
+
+  // Validate email
+  const emailRegex = /^\w+([\.-]?\w+)*@\w+([\.-]?\w+)*(\.\w{2,3})+$/;
+  if (!emailRegex.test(email)) {
+      return res.status(400).send('Invalid email format');
+  }
+
+  // Validate mobile number 
+  const mobileNumberRegex = /^\d{10}$/;
+  if (!mobileNumberRegex.test(mobileNumber)) {
+      return res.status(400).send('Invalid mobile number format. Please enter a 10-digit number without spaces or special characters.');
+  }
+  const dateTime = new Date(`${Date}T${Time}`);
+  const DateTime = `${dateTime.toDateString()} ${dateTime.toLocaleTimeString()}`;
+
+  console.log('Received report:');
+  console.log('Date:', Date);
+  console.log('Time:', Time);
+  console.log('Email:', email);
+  console.log('Mobile Number:', mobileNumber);
+  console.log('Subject:', subject);
+  console.log('Explanation:', explaininBrief);
+
+  res.status(201).send('Report submitted successfully!');
+});
+
+app.get('/report', (req, res) => {
+  const { Date, Time, email, mobileNumber, subject, explaininBrief } = req.query;
+  res.send(`Received report request with parameters:
+  Date: ${Date}
+  Time: ${Time}
+  Email: ${email}
+  Mobile Number: ${mobileNumber}
+  Subject: ${subject}
+  Explain in Brief: ${explaininBrief}`);
+});
+
+//anonymous report
+
+// Function to insert anonymous report data into the database
+
+function insertAnonymousReport(reportData) {
+  return new Promise((resolve, reject) => {
+    const query = 'INSERT INTO AnonymousReports (date, time, placeOfIncident, subject, explaininBrief) VALUES (?, ?, ?, ?, ?)';
+    pool.query(query, [reportData.Date, reportData.Time, reportData.placeOfIncident, reportData.subject, reportData.explaininBrief], (err, results) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve(results);
+    });
+  });
+}
+
+app.post('/anonymousreport', (req, res) => {
+  const { Date, Time, placeOfIncident, subject, explaininBrief } = req.body;
+
+  if (!Date || !Time || !placeOfIncident || !subject || !explaininBrief) {
+    return res.status(400).send('All fields are required');
+  }
+
+  // Validate date
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(Date)) {
+    return res.status(400).send('Invalid date format. Date should be in YYYY-MM-DD format');
+  }
+
+  // Validate time
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  if (!timeRegex.test(Time)) {
+    return res.status(400).send('Invalid time format. Time should be in HH:MM format (24-hour)');
+  }
+
+  // Insert report data into the database
+  insertAnonymousReport(req.body)
+    .then(() => {
+      console.log('Anonymous report submitted successfully');
+      res.status(201).send('Report submitted successfully!');
+    })
+    .catch(error => {
+      console.error('Error submitting anonymous report:', error);
+      res.status(500).send('Internal Server Error');
+    });
+});
+
+app.get('/anonymousreports', (req, res) => {
+  pool.query('SELECT * FROM AnonymousReports', (err, results) => {
+    if (err) {
+      console.error('Error retrieving anonymous reports:', err);
+      return res.status(500).send('Internal Server Error');
+    }
+    res.json(results);
+  });
+});
+
+// blood emergency
+let bloodEmergencyRequests = [];
+
+app.post('/blood-emergency', (req, res) => {
+    const {
+        patientName,
+        bloodType,
+        mobileNumber,
+        hospitalName,
+        hospitalAddress,
+        location,
+        pincode,
+        purposeOfBlood,
+    } = req.body;
+
+    if (!patientName || !bloodType || !mobileNumber || !hospitalName || !hospitalAddress || !location || !pincode || !purposeOfBlood) {
+        return res.status(400).send('All fields are required');
+    }
+    const request = {
+        patientName,
+        bloodType,
+        mobileNumber,
+        hospitalName,
+        hospitalAddress,
+        location,
+        pincode,
+        purposeOfBlood,
+        timestamp: new Date().toISOString() 
+    };
+    bloodEmergencyRequests.push(request);
+
+    res.status(201).send('Blood emergency request submitted successfully!');
+});
+
+app.get('/blood-emergency', (req, res) => {
+    res.json(bloodEmergencyRequests);
+});
+
+app.listen(3000, () => {
+    console.log(`Worker ${process.pid} started and listening on port 3000`);
+  });

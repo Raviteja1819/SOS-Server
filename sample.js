@@ -7,14 +7,13 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 const upload = multer({ dest: 'uploads/' });
-const { log } = require('console');
 const app = express();
 if (cluster.isMaster) {
   console.log(`Master ${process.pid} is running`);
   // Fork workers
-  for (let i = 0; i < numCPUs; i++) {
-    cluster.fork();
-  }
+  // for (let i = 0; i < numCPUs; i++) {
+  //   cluster.fork();
+  // }
   cluster.on('exit', (worker, code, signal) => {
     console.log(`Worker ${worker.process.pid} died`);
     console.log('Forking a new worker...');
@@ -908,7 +907,6 @@ app.get('/reportedissues/:userId?', (req, res) => {
   }
 });
 // Start the server
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Server is running on port ${PORT}`);
+app.listen(3000, () => {
+  console.log(`Server is running on port 3000`);
 });
