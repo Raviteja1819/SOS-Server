@@ -585,10 +585,10 @@ app.get('/blood-requirements/:id?', (req, res) => {
 // Callback requests
   app.post('/callback', (req, res) => {
   console.log(JSON.stringify(req.body));
-  const { userId, name, date, time, place, mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+  const { userId, name, date, time,  mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude } = req.body;
 
   // Check if any required field is missing
-  if (!userId || !name || !date || !time || !place || !mobileNumber || !subject || !topicToSpeakAbout || !status || !coordinatesLatitude || !coordinatesLongitude) {
+  if (!userId || !name || !date || !time || !mobileNumber || !subject || !topicToSpeakAbout || !status || !coordinatesLatitude || !coordinatesLongitude) {
     return res.status(400).send('All fields are required');
   }
 
@@ -601,7 +601,6 @@ app.get('/blood-requirements/:id?', (req, res) => {
     name,
     date,
     time,
-    place,
     mobileNumber,
     subject,
     topicToSpeakAbout,
@@ -612,8 +611,8 @@ app.get('/blood-requirements/:id?', (req, res) => {
 
   // Insert callback request into the database
   connection.query(
-    'INSERT INTO callbackRequest (Id, userId, name, date, time, place, mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [Id, userId, name, date, time, place, mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude],
+    'INSERT INTO callbackRequest (Id, userId, name, date, time,  mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [Id, userId, name, date, time,  mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude],
     (error, results) => {
       if (error) {
         console.error('Error inserting callback request:', error);
