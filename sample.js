@@ -442,20 +442,6 @@ app.post('/blood-emergency', (req, res) => {
     });
 });
 
-app.get('/blood-emergency', (req, res) => {
-  const userId = req.header('userId');  // Extract the userId from query parameters
-  if (!userId) {
-    return res.status(400).json({ message: 'userId parameter is required' });
-  }
-  // Query the database to retrieve blood emergency data for the specified userId
-  connection.query('SELECT * FROM bloodEmergency WHERE userId = ?', userId, (err, results) => {
-    if (err) {
-      console.error('Error retrieving blood emergency:', err);
-      return res.status(500).send('Internal Server Error');
-    }
-    res.json(results);
-  });
-});
 //list of all the bloodemergency
 app.get('/bloodEmergency/:userId?', (req, res) => {
   const userId = req.header('userId'); // Extract the userId from request headers
@@ -657,7 +643,34 @@ app.get('/callback/:id?', (req, res) => {
     });
   }
 });
-//list af all users
+//fetch a single user 
+app.get('/users', (req, res) => {
+  console.log('entered');
+
+  // Extract the userId from the query parameters
+  const userId = req.query.userId;
+
+  // Check if userId parameter is missing or empty
+  if (!userId) {
+    return res.status(400).json({ message: 'userId parameter is required' });
+  }
+
+  // Retrieve the user by userId
+  console.log('true');
+  const query = 'SELECT * FROM users WHERE userId = ?';
+  connection.query(query, userId, (error, results) => {
+    if (error) {
+      console.error('Error retrieving user:', error);
+      return res.status(500).send('Internal Server Error');
+    }
+    if (results.length === 0) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+    res.json(results[0]);
+  });
+});
+
+// fetch all the users
 app.get('/users/:userId?', (req, res) => {
   console.log('entered');
 
@@ -695,6 +708,8 @@ app.get('/users/:userId?', (req, res) => {
       });
   }
 });
+
+
 // Set up multer to handle file uploads
 const storage = multer.memoryStorage();
 // list of sponsors
@@ -918,6 +933,59 @@ app.get('/reportedissues/:userId?', (req, res) => {
     });
   }
 });
+// notifications
+// Import the uuid package
+const uuid = require('uuid');
+
+// Function to generate a unique notification ID
+function generateNotificationId() {
+  return uuid.v4(); // Assuming you're using the uuid package to generate unique IDs
+}
+
+app.post('/notification', (req, res) => {
+  const { userId, type, message, coordinatesLatitude, coordinatesLongitude } = req.body;
+
+  // Check if userId, type, message, coordinatesLatitude, and coordinatesLongitude are provided
+  if (!userId || !type || !message || !coordinatesLatitude || !coordinatesLongitude) {
+    return res.status(400).json({ message: 'userId, type, message, coordinatesLatitude, and coordinatesLongitude are required fields' });
+  }
+
+  // Generate a unique notification ID
+  const notificationId = generateNotificationId();
+
+  // Insert the notification into the database
+  const insertQuery = 'INSERT INTO notifications (notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?)';
+  connection.query(insertQuery, [notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude], (error, results) => {
+    if (error) {
+      console.error('Error inserting notification:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    // Return the generated notification ID and a success message
+    res.status(201).json({ message: 'Notification created successfully', notificationId });
+  });
+});
+// fetch notifications
+app.get('/notification', (req, res) => {
+  console.log('entered');
+
+  const userId = req.header('userId'); // Extract the userId from request headers
+
+  // Check if userId header is missing or empty
+  if (!userId) {
+    return res.status(400).json({ message: 'userId header is required' });
+  }
+
+  // Retrieve all notifications except for the user identified by userId
+  const query = 'SELECT notificationId, type, message, coordinatesLatitude, coordinatesLongitude  FROM notifications WHERE userId != ?';
+  connection.query(query, userId, (error, results) => {
+    if (error) {
+      console.error('Error retrieving notifications:', error);
+      return res.status(500).send('Internal Server Error');
+    }
+    res.json(results);
+  });
+});
+
 // Start the server
 app.listen(3000, () => {
   console.log(`Server is running on port 3000`);
