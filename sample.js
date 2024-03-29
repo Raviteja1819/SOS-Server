@@ -7,6 +7,7 @@ const cors = require('cors');
 const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
+const { error, Console } = require('console');
 const upload = multer({ dest: 'uploads/' });
 if (cluster.isMaster) {
   console.log(`Master ${process.pid} is running`);
@@ -58,6 +59,23 @@ if (cluster.isMaster) {
     return userID.substring(0, 28).padEnd(28, '0');
   }
 
+  app.get('/contacts/:id', (req, res) => {
+    const userId = req.header('userId');  // Extract the id parameter from the request URL
+  
+    // Query the database to retrieve emergency contacts for the specified person ID
+    connection.query('SELECT * FROM emergencyContacts WHERE userId = ?', req.params.id, (error, results) => {
+      if (error) {
+        console.error('Error retrieving emergency contacts:', error);
+        return res.status(500).json({ error: 'Internal Server Error' });
+      }
+      // Check if any emergency contacts were found for the specified person ID
+      if (results.length === 0) {
+        return res.status(404).json({ error: 'Person not found or no emergency contacts available' });
+      }
+      // Return the emergency contacts for the specified person ID
+      res.json(results);
+    });
+});
   // Signup route
   
  app.post('/signup', (req, res, next) => {
@@ -128,15 +146,16 @@ bcrypt.hash(password, 10,(err,hashedPassword)=>{
 
         // Insert emergency contacts
         const emergencyContactInsertQuery = `
-          INSERT INTO emergencyContacts (userId, name, relation, mobileNumber)
-          VALUES (?, ?, ?, ?)
+          INSERT INTO emergencyContacts (userId, name, relation, mobileNumber,id)
+          VALUES (?, ?, ?, ?,?)
         `;
-
+         var id;
         const emergencyContactPromises = emergencyContacts.map(contact => {
           return new Promise((resolve, reject) => {
+            id= uuid.v4().substring(0, 8);
             connection.query(
               emergencyContactInsertQuery,
-              [userID, contact.name, contact.relation, contact.mobileNumber],
+              [userID, contact.name, contact.relation, contact.mobileNumber,id],
               (error, results) => {
                 if (error) {
                   console.error('Error inserting emergency contact:', error);
@@ -163,7 +182,22 @@ bcrypt.hash(password, 10,(err,hashedPassword)=>{
 });
  
 });
-
+// update emergency contacts
+app.put('/contacts/:id', (req, res) => {
+  const contactId = req.params.id;
+  const { name, mobileNumber , relation} = req.body;  // Check if the required fields are present
+  if (!name || !mobileNumber||!relation) {
+    return res.status(400).json({ message: 'Name and mobileNumber,relation are required' });
+  }  // Update the emergency contact in the database
+  const query = 'UPDATE emergencyContacts SET name = ?, mobileNumber = ? , relation= ? WHERE id = ?';
+  connection.query(query, [name, mobileNumber,relation,contactId], (error, results) => {
+    if (error) {
+      console.error('Error updating emergency contact:', error);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+    res.json({ message: 'Emergency contact updated successfully' });
+  });
+});
 
   // Login route
   app.post('/login', (req, res) => {
@@ -203,23 +237,7 @@ bcrypt.hash(password, 10,(err,hashedPassword)=>{
 
 
   // Retrieve emergency contacts for a person
-  app.get('/contacts', (req, res) => {
-    const userId = req.header('userId');  // Extract the id parameter from the request URL
   
-    // Query the database to retrieve emergency contacts for the specified person ID
-    connection.query('SELECT * FROM emergencyContacts WHERE userId = ?', userId, (error, results) => {
-      if (error) {
-        console.error('Error retrieving emergency contacts:', error);
-        return res.status(500).json({ error: 'Internal Server Error' });
-      }
-      // Check if any emergency contacts were found for the specified person ID
-      if (results.length === 0) {
-        return res.status(404).json({ error: 'Person not found or no emergency contacts available' });
-      }
-      // Return the emergency contacts for the specified person ID
-      res.json(results);
-    });
-});
 // Define the validateFields middleware function
 function validateFields(req, res, next) {
   const { userId, name, mobileNumber, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
@@ -282,7 +300,7 @@ app.get('/bloodcheckup/:id?', (req, res) => {
   if (req.params.id) {
     console.log('true');
     // Fetch a single blood checkup report based on the provided ID
-    connection.query('SELECT * FROM bloodCheckup WHERE userId = ?', req.params.id, (error, results) => {
+    connection.query('SELECT * FROM bloodCheckup WHERE Id = ?', req.params.id, (error, results) => {
       if (error) {
         console.error('Error retrieving blood checkup report:', error);
         return res.status(500).send('Internal Server Error');
@@ -324,10 +342,10 @@ app.get('/bloodcheckup/:id?', (req, res) => {
   // post anonymous reports
   app.post('/anonymousreport', (req, res) => {
     console.log(JSON.stringify(req.body));
-      const { userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status } = req.body;
+      const { reportedAccount,userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status } = req.body;
     
       // Validate if all fields are provided
-      if (!userId || !date || !time || !placeOfIncident || !subject || !explainInBreif || !coordinatesLatitude || !coordinatesLongitude || !status) {
+      if (!reportedAccount ||!userId || !date || !time || !placeOfIncident || !subject || !explainInBreif || !coordinatesLatitude || !coordinatesLongitude || !status) {
         
         return res.status(400).send('All fields are required');
       }
@@ -351,8 +369,8 @@ app.get('/bloodcheckup/:id?', (req, res) => {
     
       // Insert report data into the database
       connection.query(
-        'INSERT INTO anonymousReport (Id, userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [Id, userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status],
+        'INSERT INTO anonymousReport (Id, reportedAccount,userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status) VALUES (?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [Id, reportedAccount,userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status],
         (error, result) => {
           if (error) {
             console.error('Error inserting details into anonymousReport:', error);
@@ -363,19 +381,19 @@ app.get('/bloodcheckup/:id?', (req, res) => {
         }
       );
   });
-  app.get('/anonymousreport', (req, res) => {
-    const userId = req.header('userId'); // Extract the userId from request headers
-    if (!userId) {
-      return res.status(400).json({ message: 'userId header is required' });
-    }
-    connection.query('SELECT * FROM anonymousReport WHERE userId = ?', userId, (err, results) => {
-      if (err) {
-        console.error('Error retrieving anonymous reports:', err);
-        return res.status(500).send('Internal Server Error');
-      }
-      res.json(results);
-    });
-  });
+  // app.get('/anonymousreport', (req, res) => {
+  //   const userId = req.header('userId'); // Extract the userId from request headers
+  //   if (!userId) {
+  //     return res.status(400).json({ message: 'userId header is required' });
+  //   }
+  //   connection.query('SELECT * FROM anonymousReport WHERE Id = ?', userId, (err, results) => {
+  //     if (err) {
+  //       console.error('Error retrieving anonymous reports:', err);
+  //       return res.status(500).send('Internal Server Error');
+  //     }
+  //     res.json(results);
+  //   });
+  // });
   // fetch anonymous data of all the users 
   app.get('/anonymousreports/:id?', (req, res) => {
     console.log('entered');
@@ -406,6 +424,8 @@ app.get('/bloodcheckup/:id?', (req, res) => {
       });
     }
   });
+  
+  
   // bloodemergency
 app.post('/blood-emergency', (req, res) => {
   console.log(JSON.stringify(req.body));
@@ -468,7 +488,7 @@ app.get('/bloodEmergency/:userId?', (req, res) => {
   if (req.params.userId) {
     const userIdParam = req.params.userId;
     // Prepare the SQL query to select blood emergency reports for the specified userId
-    const query = 'SELECT * FROM bloodEmergency WHERE userId = ?';
+    const query = 'SELECT * FROM bloodEmergency WHERE Id = ?';
     // Execute the query with the userId parameter
     connection.query(query, userIdParam, (err, results) => {
       if (err) {
@@ -526,36 +546,37 @@ app.post('/blood-requirements', async (req, res) => {
   }
 });
 
-// blood requirements
-app.get('/blood-requirements', async (req, res) => {
-  try {
-    const userId = req.header('userId');
+// // blood requirements
+// app.get('/blood-requirements', async (req, res) => {
+//   try {
+//     const userId = req.header('userId');
 
-    // Check if userId is provided in headers
-    if (!userId) {
-      return res.status(401).json({ message: 'userId parameter is required in headers' });
-    }
+//     // Check if userId is provided in headers
+//     if (!userId) {
+//       return res.status(401).json({ message: 'userId parameter is required in headers' });
+//     }
 
-    // Retrieve all blood requirements for a specific user from the BloodRequirement table
-    const bloodRequirements = await new Promise((resolve, reject) => {
-      connection.query('SELECT * FROM bloodRequirement WHERE userId = ?', userId, (error, results) => {
-        if (error) {
-          reject(error);
-        } else {
-          resolve(results);
-        }
-      });
-    });
-    res.json(bloodRequirements);
-  } catch (error) {
-    console.error('Error retrieving blood requirements:', error);
-    res.status(500).send('Internal Server Error');
-  }
-});
+//     // Retrieve all blood requirements for a specific user from the BloodRequirement table
+//     const bloodRequirements = await new Promise((resolve, reject) => {
+//       connection.query('SELECT * FROM bloodRequirement WHERE userId = ?', userId, (error, results) => {
+//         if (error) {
+//           reject(error);
+//         } else {
+//           resolve(results);
+//         }
+//       });
+//     });
+//     res.json(bloodRequirements);
+//   } catch (error) {
+//     console.error('Error retrieving blood requirements:', error);
+//     res.status(500).send('Internal Server Error');
+//   }
+// });
 // list of all blood requirements
 app.get('/blood-requirements/:id?', (req, res) => {
   console.log('entered');
   const userId = req.header('userId'); // Extract the userId from request headers
+ 
   // Check if userId header is missing or empty
   if (!userId) {
     return res.status(400).json({ message: 'userId header is required' });
@@ -563,12 +584,15 @@ app.get('/blood-requirements/:id?', (req, res) => {
   // If an ID is provided in the URL, fetch a single blood requirement case by that ID
   if (req.params.id) {
     console.log('true');
-    connection.query('SELECT * FROM bloodRequirement WHERE userId = ?', req.params.id, (error, results) => {
+    connection.query('SELECT * FROM bloodRequirement WHERE Id = ? AND userId = ?', [req.params.id, userId], (error, results) => {
       if (error) {
         console.error('Error retrieving blood requirement case:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
       }
-      res.json(results);
+      if (results.length === 0) {
+        return res.status(404).json({ message: 'Blood requirement case not found' });
+      }
+      res.json(results[0]); // Return the first (and only) result
     });
   } else {
     console.log('false');
@@ -582,6 +606,7 @@ app.get('/blood-requirements/:id?', (req, res) => {
     });
   }
 });
+
 // Callback requests
   app.post('/callback', (req, res) => {
   console.log(JSON.stringify(req.body));
@@ -626,7 +651,6 @@ app.get('/blood-requirements/:id?', (req, res) => {
 // Endpoint to retrieve all callback requests
 app.get('/callback/:id?', (req, res) => {
   console.log('entered');
- 
   // console.log(id);
   const userId = req.header('userId'); // Extract the userId from request headers
 
@@ -634,11 +658,12 @@ app.get('/callback/:id?', (req, res) => {
   if (!userId) {
     return res.status(400).json({ message: 'userId header is required' });
   }
-
+  console.log('true',req.params.id,);
+  const query = 'SELECT * FROM callbackRequest WHERE userId = ?';
   // Retrieve all callback requests from the database
   if (req.params.id) {
     console.log('true');
-    connection.query('SELECT * FROM callbackRequest WHERE userId = ?',req.params.id, (error, results) => {
+    connection.query('SELECT * FROM callbackRequest WHERE Id = ?',[req.params.id], (error, results) => {
       if (error) {
         console.error('Error retrieving callback requests:', error);
         return res.status(500).send('Internal Server Error');
@@ -657,42 +682,39 @@ app.get('/callback/:id?', (req, res) => {
   }
 });
 //list af all users
-app.get('/users/:userId?', (req, res) => {
-  console.log('entered');
-
-  // Extract the userId from request headers
+app.get('/users/:userId?',(req,res)=>{
+  console.log('entered users herer');
   const userId = req.header('userId');
-
-  // Check if userId header is missing or empty
-  if (!userId) {
-      return res.status(400).json({ message: 'userId header is required' });
+console.log(userId);
+  if (!userId){
+  return res.status(400).json({message:'userId parameter is requirerd'});
   }
-
-  // Retrieve all users or a single user based on the presence of userId parameter
-  if (req.params.userId) {
-      console.log('true');
-      const query = 'SELECT * FROM users WHERE userId = ?';
-      connection.query(query, req.params.userId, (error, results) => {
-          if (error) {
-              console.error('Error retrieving user:', error);
-              return res.status(500).send('Internal Server Error');
-          }
-          if (results.length === 0) {
-              return res.status(404).json({ message: 'User not found' });
-          }
-          res.json(results[0]);
-      });
-  } else {
-      console.log('false');
-      const query = 'SELECT * FROM users';
-      connection.query(query, (error, results) => {
-          if (error) {
-              console.error('Error fetching users:', error);
-              return res.status(500).json({ message: 'Internal server error' });
-          }
-          res.status(200).json(results);
-      });
-  }
+  console.log('true',req.params.userId,);
+  const query = 'SELECT * FROM users WHERE userId = ?';
+ if (req.params.userId) {
+  console.log(req.params.userId,userId);
+  connection.query('SELECT * FROM users WHERE userId = ?',[req.params.userId], (error, results) => {
+    if(error){
+      console.error('Error retriving user',error);
+      return res.status(400).send('Internal server error');
+    }
+    if (results.length === 0){
+      return res.status(400).json('user not found');
+    }
+    res.json(results);
+  });
+ } else {
+  connection.query('SELECT * FROM users', (error, results) => {
+    if(error){
+      console.error('Error retriving user',error);
+      return res.status(400).send('Internal server error');
+    }
+    if (results.length === 0){
+      return res.status(400).json('user not found');
+    }
+    res.json(results);
+  });
+ }
 });
 // Set up multer to handle file uploads
 const storage = multer.memoryStorage();
@@ -899,7 +921,7 @@ app.get('/reportedissues/:userId?', (req, res) => {
   // Retrieve all reported issues from the database
   if (req.params.userId) {
     console.log('true');
-    connection.query('SELECT * FROM reportIssue WHERE userId = ?', req.params.userId, (error, results) => {
+    connection.query('SELECT * FROM reportIssue WHERE Id = ?', req.params.userId, (error, results) => {
       if (error) {
         console.error('Error retrieving reported issues:', error);
         return res.status(500).send('Internal Server Error');
@@ -917,6 +939,42 @@ app.get('/reportedissues/:userId?', (req, res) => {
     });
   }
 });
+// notifications
+
+app.post('/notification', (req, res) => {
+  console.log(JSON.stringify(req.body));
+  const { userId, type, message, coordinatesLatitude, coordinatesLongitude } = req.body;
+  if (!userId || !type || !message || !coordinatesLatitude || !coordinatesLongitude) {
+    return res.status(400).json({ error: 'userId, type, message, coordinatesLatitude, coordinatesLongitude are required fields' });
+  }
+  const notificationId = uuid.v4().substring(0, 8); // Assuming generateNotificationId() is a function that generates a unique ID
+  const insertQuery = 'INSERT INTO notifications (notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?)';
+  connection.query(insertQuery, [notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude], (error, results) => {
+    if (error) {
+      console.error('Error inserting notification:', error);
+      return res.status(500).json({ error: 'Internal server error' });
+    }
+    res.status(201).json({ message: 'Notification created successfully', notificationId });
+  });
+});
+
+// fetch notifications
+app.get('/notification', (req, res) => {
+  console.log('entered');
+  const userId = req.header('userId');
+  if (!userId) {
+    return res.status(400).json({ error: 'userId header is required' });
+  }
+  const query = 'SELECT userId ,notificationId, type, message, coordinatesLatitude, coordinatesLongitude FROM notifications WHERE userId != ?';
+  connection.query(query, userId, (error, results) => {
+    if (error) {
+      console.error('Error retrieving notifications:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
+    }
+    res.json(results);
+  });
+});
+
 // Start the server
 app.listen(3000, () => {
   console.log(`Server is running on port 3000`);
