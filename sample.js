@@ -685,7 +685,7 @@ app.get('/users/:userId?', (req, res) => {
       });
   } else {
       console.log('false');
-      const query = 'SELECT * FROM signup';
+      const query = 'SELECT * FROM users';
       connection.query(query, (error, results) => {
           if (error) {
               console.error('Error fetching users:', error);
