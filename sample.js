@@ -629,6 +629,7 @@ app.get('/callback/:id?', (req, res) => {
     });
   }
 });
+
 //list af all users
 app.get('/users/:userId?', (req, res) => {
   console.log('entered');
