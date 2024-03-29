@@ -34,7 +34,7 @@ if (cluster.isMaster) {
   const connection = mysql.createConnection({
     host: '45.112.49.217',
     user: 'root',
-    password: 'password',
+    password: 'Cyclotech@7719',
     database: 'aid'
   });
   // Connect to MySQL
@@ -82,8 +82,9 @@ if (cluster.isMaster) {
     } = req.body;
   
     const photo = req.file ? req.file.buffer : null;
+  
     // Check if all required fields are provided
-    if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !alternateNumber || !pincode || !confirmPassword || !coordinatesLatitude || !coordinatesLongitude) {
+    if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !emergencyContact3 || !alternateNumber || !pincode || !confirmPassword || !coordinatesLatitude || !coordinatesLongitude) {
       return res.status(400).send('All fields are required');
     }
   
@@ -96,79 +97,63 @@ if (cluster.isMaster) {
     const userID = generateUserID();
     console.log('Generated UserID:', userID);
   
-    pool.getConnection((err, connection) => {
-      if (err) {
-        console.error('Error connecting to database:', err);
-        return res.status(500).send('Internal Server Error');
-      }
-  
-      // Use the connection variable here
+      // Insert user details into 'users' table
+      const userInsertQuery = `
+        INSERT INTO users (firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      `;
       connection.query(
-        'INSERT INTO users (firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        userInsertQuery,
         [firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude],
-        (error, results) => {
-            connection.release();
-
-            if (error) {
-                console.error('Error inserting user details into users:', error);
-                return res.status(500).send('Internal Server Error');
-            }
-
-          // Insert emergency contact information into emergencyContacts table
-          const emergencyContactData = [];
-  
-          if (emergencyContact1) {
-            emergencyContactData.push({
-              name: emergencyContact1.name,
-              relation: emergencyContact1.relation,
-              mobileNumber: emergencyContact1.mobileNumber
-            });
+        (error, userInsertResults) => {
+          if (error) {
+            console.error('Error inserting user details into users:', error);
+            return res.status(500).send('Internal Server Error');
           }
   
-          if (emergencyContact2) {
-            emergencyContactData.push({
-              name: emergencyContact2.name,
-              relation: emergencyContact2.relation,
-              mobileNumber: emergencyContact2.mobileNumber
-            });
+          // Insert emergency contact information into 'emergencyContacts' table
+          const emergencyContacts = [emergencyContact1, emergencyContact2, emergencyContact3].filter(contact => contact);
+  
+          // Check if there are less than 2 or more than 3 emergency contacts
+          if (emergencyContacts.length < 2 || emergencyContacts.length > 3) {
+            return res.status(400).json({ error: 'At least two and no more than three emergency contacts are required' });
           }
-          if (emergencyContact3) {
-            emergencyContactData.push({
-              name: emergencyContact2.name,
-              relation: emergencyContact2.relation,
-              mobileNumber: emergencyContact2.mobileNumber
+  
+          // Insert emergency contacts
+          const emergencyContactInsertQuery = `
+            INSERT INTO emergencyContacts (userId, name, relation, mobileNumber)
+            VALUES (?, ?, ?, ?)
+          `;
+  
+          const emergencyContactPromises = emergencyContacts.map(contact => {
+            return new Promise((resolve, reject) => {
+              connection.query(
+                emergencyContactInsertQuery,
+                [userID, contact.name, contact.relation, contact.mobileNumber],
+                (error, results) => {
+                  if (error) {
+                    console.error('Error inserting emergency contact:', error);
+                    reject(error);
+                  } else {
+                    resolve(results);
+                  }
+                }
+              );
             });
-          }
-          
-          // Check if there are less than 2 emergency contacts or more than 3
-if (emergencyContactData.length < 2 || emergencyContactData.length > 3) {
-    return res.status(400).json({ error: 'At least two and no more than three emergency contacts are required' });
-  }
-// Insert emergency contact information into emergencyContacts table
-const emergencyContactPromises = emergencyContactData.map((contact) => {
-    return new Promise((resolve, reject) => {
-        const query = 'INSERT INTO emergencyContacts (userId, name, relation, mobileNumber) VALUES (?, ?, ?, ?)';
-        connection.query(query, [userID, contact.name, contact.relation, contact.mobileNumber], (error, results) => {
-            if (error) {
-                console.error('Error inserting emergency contact:', error);
-                reject(error);
-            }
-            resolve(results);
-        });
-    });
-});
+          });
+  
           Promise.all(emergencyContactPromises)
             .then(() => {
               res.status(201).json({ message: 'Account created successfully', userID });
             })
-            .catch((error) => {
+            .catch(error => {
               console.error('Error inserting emergency contacts:', error);
               return res.status(500).json({ error: 'Internal server error' });
             });
         }
       );
     });
-  });
+  
 
   // Login route
   app.post('/login', (req, res) => {
@@ -570,12 +555,12 @@ app.get('/blood-requirements/:id?', (req, res) => {
   }
 });
 // Callback requests
-app.post('/callback', (req, res) => {
+  app.post('/callback', (req, res) => {
   console.log(JSON.stringify(req.body));
-  const { userId, name, date, time, place, mobileNumber, subject, topictospeakabout, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+  const { userId, name, date, time, place, mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude } = req.body;
 
   // Check if any required field is missing
-  if (!userId || !name || !date || !time || !place || !mobileNumber || !subject || !topictospeakabout || !status || !coordinatesLatitude || !coordinatesLongitude) {
+  if (!userId || !name || !date || !time || !place || !mobileNumber || !subject || !topicToSpeakAbout || !status || !coordinatesLatitude || !coordinatesLongitude) {
     return res.status(400).send('All fields are required');
   }
 
@@ -591,7 +576,7 @@ app.post('/callback', (req, res) => {
     place,
     mobileNumber,
     subject,
-    topictospeakabout,
+    topicToSpeakAbout,
     status,
     coordinatesLatitude,
     coordinatesLongitude
@@ -599,8 +584,8 @@ app.post('/callback', (req, res) => {
 
   // Insert callback request into the database
   connection.query(
-    'INSERT INTO callbackRequest (Id, userId, name, date, time, place, mobileNumber, subject, topictospeakabout, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [Id, userId, name, date, time, place, mobileNumber, subject, topictospeakabout, status, coordinatesLatitude, coordinatesLongitude],
+    'INSERT INTO callbackRequest (Id, userId, name, date, time, place, mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [Id, userId, name, date, time, place, mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude],
     (error, results) => {
       if (error) {
         console.error('Error inserting callback request:', error);
