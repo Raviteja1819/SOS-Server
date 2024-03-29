@@ -4,6 +4,7 @@ const express = require('express');
 const multer = require('multer');
 const uuid = require('uuid');
 const cors = require('cors');
+const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 const upload = multer({ dest: 'uploads/' });
@@ -59,119 +60,146 @@ if (cluster.isMaster) {
 
   // Signup route
   
-  app.post('/signup', (req, res, next) => {
-    const {
-      firstName,
-      lastName,
-      mobileNumber,
-      email,
-      password,
-      dateOfBirth,
-      age,
-      gender,
-      bloodGroup,
-      address,
-      emergencyContact1,
-      emergencyContact2,
-      emergencyContact3,
-      alternateNumber,
-      pincode,
-      confirmPassword,
-      coordinatesLatitude,
-      coordinatesLongitude
-    } = req.body;
-  
-    const photo = req.file ? req.file.buffer : null;
-  
-    // Check if all required fields are provided
-    if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !emergencyContact3 || !alternateNumber || !pincode || !confirmPassword || !coordinatesLatitude || !coordinatesLongitude) {
-      return res.status(400).send('All fields are required');
+ app.post('/signup', (req, res, next) => {
+  const {
+    firstName,
+    lastName,
+    mobileNumber,
+    email,
+    password,
+    dateOfBirth,
+    age,
+    gender,
+    bloodGroup,
+    address,
+    emergencyContact1,
+    emergencyContact2,
+    emergencyContact3,
+    alternateNumber,
+    pincode,
+    confirmPassword,
+    coordinatesLatitude,
+    coordinatesLongitude
+  } = req.body;
+
+  const photo = req.file ? req.file.buffer : null;
+
+  // Check if all required fields are provided
+  if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !emergencyContact3 || !alternateNumber || !pincode || !confirmPassword || !coordinatesLatitude || !coordinatesLongitude) {
+    return res.status(400).send('All fields are required');
+  }
+
+  // Check if password and confirmPassword match
+  if (password !== confirmPassword) {
+    return res.status(400).send('Password and confirm password do not match');
+  }
+
+  // Generate 28-character userID
+  const userID = generateUserID();
+  console.log('Generated UserID:', userID);
+bcrypt.hash(password, 10,(err,hashedPassword)=>{
+  connection.connect((err) => {
+    if (err) {
+      console.error('Error connecting to database:', err);
+      return res.status(500).send('Internal Server Error');
     }
-  
-    // Check if password and confirmPassword match
-    if (password !== confirmPassword) {
-      return res.status(400).send('Password and confirm password do not match');
-    }
-  
-    // Generate 28-character userID
-    const userID = generateUserID();
-    console.log('Generated UserID:', userID);
-  
-      // Insert user details into 'users' table
-      const userInsertQuery = `
-        INSERT INTO users (firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude)
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `;
-      connection.query(
-        userInsertQuery,
-        [firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude],
-        (error, userInsertResults) => {
-          if (error) {
-            console.error('Error inserting user details into users:', error);
-            return res.status(500).send('Internal Server Error');
-          }
-  
-          // Insert emergency contact information into 'emergencyContacts' table
-          const emergencyContacts = [emergencyContact1, emergencyContact2, emergencyContact3].filter(contact => contact);
-  
-          // Check if there are less than 2 or more than 3 emergency contacts
-          if (emergencyContacts.length < 2 || emergencyContacts.length > 3) {
-            return res.status(400).json({ error: 'At least two and no more than three emergency contacts are required' });
-          }
-  
-          // Insert emergency contacts
-          const emergencyContactInsertQuery = `
-            INSERT INTO emergencyContacts (userId, name, relation, mobileNumber)
-            VALUES (?, ?, ?, ?)
-          `;
-  
-          const emergencyContactPromises = emergencyContacts.map(contact => {
-            return new Promise((resolve, reject) => {
-              connection.query(
-                emergencyContactInsertQuery,
-                [userID, contact.name, contact.relation, contact.mobileNumber],
-                (error, results) => {
-                  if (error) {
-                    console.error('Error inserting emergency contact:', error);
-                    reject(error);
-                  } else {
-                    resolve(results);
-                  }
-                }
-              );
-            });
-          });
-  
-          Promise.all(emergencyContactPromises)
-            .then(() => {
-              res.status(201).json({ message: 'Account created successfully', userID });
-            })
-            .catch(error => {
-              console.error('Error inserting emergency contacts:', error);
-              return res.status(500).json({ error: 'Internal server error' });
-            });
+    // Insert user details into 'users' table
+    const userInsertQuery = `
+      INSERT INTO users (firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude, passkey)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ? )
+    `;
+
+    connection.query(
+      userInsertQuery,
+      [firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, photo, userID, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude, hashedPassword],
+      (error, userInsertResults) => {
+        if (error) {
+          console.error('Error inserting user details into users:', error);
+          return res.status(500).send('Internal Server Error');
         }
-      );
-    });
-  
+
+        // Insert emergency contact information into 'emergencyContacts' table
+        const emergencyContacts = [emergencyContact1, emergencyContact2, emergencyContact3].filter(contact => contact);
+
+        // Check if there are less than 2 or more than 3 emergency contacts
+        if (emergencyContacts.length < 2 || emergencyContacts.length > 3) {
+          return res.status(400).json({ error: 'At least two and no more than three emergency contacts are required' });
+        }
+
+        // Insert emergency contacts
+        const emergencyContactInsertQuery = `
+          INSERT INTO emergencyContacts (userId, name, relation, mobileNumber)
+          VALUES (?, ?, ?, ?)
+        `;
+
+        const emergencyContactPromises = emergencyContacts.map(contact => {
+          return new Promise((resolve, reject) => {
+            connection.query(
+              emergencyContactInsertQuery,
+              [userID, contact.name, contact.relation, contact.mobileNumber],
+              (error, results) => {
+                if (error) {
+                  console.error('Error inserting emergency contact:', error);
+                  reject(error);
+                } else {
+                  resolve(results);
+                }
+              }
+            );
+          });
+        });
+
+        Promise.all(emergencyContactPromises)
+          .then(() => {
+            res.status(201).json({ message: 'Account created successfully', userID });
+          })
+          .catch(error => {
+            console.error('Error inserting emergency contacts:', error);
+            return res.status(500).json({ error: 'Internal server error' });
+          });
+      }
+    );
+  });
+});
+ 
+});
+
 
   // Login route
   app.post('/login', (req, res) => {
     const { identifier, password } = req.body;
-    const query = 'SELECT * FROM users WHERE (email = ? OR mobileNumber = ?) AND password = ?';
-    connection.query(query, [identifier, identifier, password], (err, results) => {
-      if (err) {
-        console.error('Error logging in:', err);
-        res.status(500).json({ message: 'Internal server error' });
-        return;
-      }
-      if (results.length === 0) {
-        res.status(401).json({ message: 'Invalid email/phone number or password' });
-      } else {
-        res.status(200).json({ message: 'Login successful', user: results[0] });
-      }
+    const query = 'SELECT * FROM users WHERE email = ? OR mobileNumber = ?';
+    connection.query(query, [identifier, identifier], (err, results) => {
+        if (err) {
+            console.error('Error logging in:', err);
+            res.status(500).json({ message: 'Internal server error' });
+            return;
+        }
+        if (results.length === 0) {
+            res.status(401).json({ message: 'Invalid email/phone number or password' });
+            return;
+        }
+
+        const user = results[0];
+        const hashedPassword = user.passkey; // Assuming passkey is the column storing the hashed password
+        // Compare hashed password with provided password
+        bcrypt.compare(password, hashedPassword, (compareErr, match) => {
+            if (compareErr) {
+                console.error('Error comparing passwords:', compareErr);
+                res.status(500).json({ message: 'Internal server error' });
+                return;
+            }
+            if (match) {
+                // Passwords match, login successful
+                res.status(200).json({ message: 'Login successful', user });
+            } else {
+                // Passwords don't match
+                res.status(401).json({ message: 'Invalid email/phone number or password' });
+            }
+        });
     });
 });
+
 
 
   // Retrieve emergency contacts for a person
@@ -629,7 +657,6 @@ app.get('/callback/:id?', (req, res) => {
     });
   }
 });
-
 //list af all users
 app.get('/users/:userId?', (req, res) => {
   console.log('entered');
