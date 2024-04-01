@@ -237,8 +237,7 @@ app.put('/contacts/:id', (req, res) => {
         }
 
         const user = results[0];
-        const hashedPassword = user.passkey; // Assuming passkey is the column storing the hashed password
-        // Compare hashed password with provided password
+        const hashedPassword = user.passkey;
         bcrypt.compare(password, hashedPassword, (compareErr, match) => {
             if (compareErr) {
                 console.error('Error comparing passwords:', compareErr);
@@ -247,7 +246,7 @@ app.put('/contacts/:id', (req, res) => {
             }
             if (match) {
               const userWithoutPasskey = {
-                userId: user.userId, // <-- Error occurs here
+                userId: user.userId, 
                 firstName: user.firstName,
                 lastName: user.lastName,
                 mobileNumber: user.mobileNumber,
@@ -264,6 +263,67 @@ app.put('/contacts/:id', (req, res) => {
         });
     });
 });
+//change password
+const bcrypt = require('bcrypt');
+
+// POST endpoint to update password with old password verification
+app.post('/update-password', (req, res) => {
+  const { email, mobileNumber, oldPassword, newPassword } = req.body;
+
+  // Fetch the user data from the database based on email or mobileNumber
+  const query = 'SELECT * FROM users WHERE email = ? OR mobileNumber = ?';
+  connection.query(query, [email, mobileNumber], (err, results) => {
+      if (err) {
+          console.error('Error fetching user data:', err);
+          res.status(500).json({ message: 'Internal server error' });
+          return;
+      }
+
+      if (results.length === 0) {
+          res.status(404).json({ message: 'User not found' });
+          return;
+      }
+
+      const user = results[0];
+
+      // Compare the old password provided with the hashed password stored in the database
+      bcrypt.compare(oldPassword, user.passkey, (compareErr, match) => {
+          if (compareErr) {
+              console.error('Error comparing passwords:', compareErr);
+              res.status(500).json({ message: 'Internal server error' });
+              return;
+          }
+
+          if (!match) {
+              // Old password doesn't match
+              res.status(401).json({ message: 'Old password is incorrect' });
+              return;
+          }
+
+          // Hash the new password
+          bcrypt.hash(newPassword, 10, (hashErr, hashedPassword) => {
+              if (hashErr) {
+                  console.error('Error hashing password:', hashErr);
+                  res.status(500).json({ message: 'Internal server error' });
+                  return;
+              }
+
+              // Update the password in the database
+              const updateQuery = 'UPDATE users SET passkey = ? WHERE userId = ?';
+              connection.query(updateQuery, [hashedPassword, user.userId], (updateErr, updateResults) => {
+                  if (updateErr) {
+                      console.error('Error updating password:', updateErr);
+                      res.status(500).json({ message: 'Internal server error' });
+                      return;
+                  }
+                  res.status(200).json({ message: 'Password updated successfully' });
+              });
+          });
+      });
+  });
+});
+
+
 // update profile data
 app.put('/users', (req, res) => {
   const userId = req.headers.userid;
