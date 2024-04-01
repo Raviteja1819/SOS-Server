@@ -302,10 +302,10 @@ function validateFields(req, res, next) {
 //  blood checkup creation
 app.post('/bloodcheckup', validateFields, (req, res, next) => {
   // Destructure fields from request body
-  const { userId, name, mobileNumber, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+  const { userId, name, mobileNumber, time, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
   
   // Check if any required field is missing
-  if (!userId || !name || !mobileNumber || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
+  if (!userId || !name || !mobileNumber || !time || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
     console.log('All fields are required');
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -315,6 +315,7 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
     userId,
     name,
     mobileNumber,
+    time,
     place,
     pincode,
     status,
@@ -327,8 +328,8 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
 
   // Insert blood checkup data into the database
   connection.query(
-    'INSERT INTO bloodCheckup (Id, userId, name, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [Id, userId, name, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude],
+    'INSERT INTO bloodCheckup (Id, userId, name, time, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [Id, userId, name, time, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude],
     (error, result) => {
       if (error) {
         console.error('Error inserting details into bloodCheckup:', error);
@@ -339,6 +340,7 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
     }
   );
 });
+
 // list of all bloodcheckups
 app.get('/bloodcheckup/:id?', (req, res) => {
   console.log('entered');
@@ -689,7 +691,7 @@ app.get('/blood-requirements/:id?', (req, res) => {
 
   // Insert callback request into the database
   connection.query(
-    'INSERT INTO callbackRequest (Id, userId, name, date, time,  mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO callbackRequest (Id, userId, name, date, time,  mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [Id, userId, name, date, time,  mobileNumber, subject, topicToSpeakAbout, status, coordinatesLatitude, coordinatesLongitude],
     (error, results) => {
       if (error) {
@@ -1027,6 +1029,55 @@ app.get('/notification', (req, res) => {
     res.json(results);
   });
 });
+
+// update status in all the reports
+app.post('/update-status', (req, res) => {
+  const { reportType, reportId, status } = req.body;
+
+  // Validate if all fields are provided
+  if (!reportType || !reportId || !status) {
+    return res.status(400).send('reportType, reportId, and status are required fields');
+  }
+
+  // Define the appropriate table based on the report type
+  let tableName;
+  switch (reportType) {
+    case 'reportedissues':
+      tableName = 'reportIssue';
+      break;
+    case 'callback':
+      tableName = 'callbackRequest';
+      break;
+    case 'blood-requirements':
+      tableName = 'bloodRequirement';
+      break;
+    case 'bloodcheckup':
+      tableName = 'bloodCheckup';
+      break;
+    case 'anonymousreport':
+      tableName = 'anonymousReport';
+      break;
+    case 'blood-emergency':
+      tableName = 'bloodEmergency';
+      break;
+      case 'bloodEmergency':
+        tableName = 'bloodEmergency';
+        break;
+    default:
+      return res.status(400).send('Invalid reportType');
+  }
+
+  // Update status in the specified table
+  const query = `UPDATE ${tableName} SET status = ? WHERE Id = ?`;
+  connection.query(query, [status, reportId], (error, results) => {
+    if (error) {
+      console.error(`Error updating status in ${tableName}:`, error);
+      return res.status(500).send('Internal Server Error');
+    }
+    res.status(200).send('Status updated successfully');
+  });
+});
+
 
 // Start the server
 app.listen(3000, () => {
