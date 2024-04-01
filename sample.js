@@ -650,7 +650,7 @@ app.get('/blood-requirements/:id?', (req, res) => {
   } else {
     console.log('false');
     // If no ID is provided, retrieve all blood requirement cases for the user
-    connection.query('SELECT * FROM bloodRequirement WHERE userId = ?', userId, (error, results) => {
+    connection.query('SELECT * FROM bloodRequirement', (error, results) => {
       if (error) {
         console.error('Error retrieving blood requirement cases:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
