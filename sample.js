@@ -7,8 +7,37 @@ const cors = require('cors');
 const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
-const { error, Console } = require('console');
-const upload = multer({ dest: 'uploads/' });
+const fs = require('fs');
+const { sin, cos, sqrt, atan2 } = require('mathjs');
+
+function degreesToRadians(degrees) {
+  return degrees * Math.PI / 180;
+}
+
+// Function to calculate the distance between two coordinates using the Haversine formula
+function haversine(lat1, lon1, lat2, lon2) {
+  const dLat = degreesToRadians(lat2 - lat1);
+  const dLon = degreesToRadians(lon2 - lon1);
+  const a = sin(dLat / 2) * sin(dLat / 2) +
+            cos(degreesToRadians(lat1)) * cos(degreesToRadians(lat2)) *
+            sin(dLon / 2) * sin(dLon / 2);
+  const c = 2 * atan2(sqrt(a), sqrt(1 - a));
+  const R = 6371; // Radius of the Earth in kilometers
+  return R * c;
+}
+
+// Function to find the nearest coordinates
+function findNearestCoordinates(latitude, longitude, coordinates) {
+  coordinates.sort((coord1, coord2) => {
+      const dist1 = haversine(parseFloat(latitude), parseFloat(longitude), parseFloat(coord1.coordinatesLatitude), parseFloat(coord1.coordinatesLongitude));
+      const dist2 = haversine(parseFloat(latitude), parseFloat(longitude), parseFloat(coord2.coordinatesLatitude), parseFloat(coord2.coordinatesLongitude));
+      return dist1 - dist2;
+  });
+
+  return coordinates;
+}
+
+
 if (cluster.isMaster) {
   console.log(`Master ${process.pid} is running`);
   // Fork workers
@@ -22,7 +51,8 @@ if (cluster.isMaster) {
   });
 } else {
   const app = express();
-
+  const images = multer({ dest: 'images/' });
+  const certificates = multer({dest : 'certificates/'})
   // Middleware
   app.use(cors());
   app.use(function(req, res, next) {
@@ -349,6 +379,44 @@ app.put('/users', (req, res) => {
       res.json({ message: 'User updated successfully' });
     }
   );
+});
+
+// profile photo
+app.post('/upload-photo', images.single('photo'), (req, res) => {
+  // Extract the userId from request headers
+  const userId = req.header('userId');
+
+  // Check if userId header is missing or empty
+  if (!userId) {
+    return res.status(400).json({ message: 'userId header is required' });
+  }
+
+  // Check if a file was uploaded
+  if (!req.file) {
+    return res.status(400).json({ message: 'No photo uploaded' });
+  }
+
+  // Prepare the SQL query to insert data into the users table
+  const query = 'UPDATE users SET photo = ? WHERE userId = ?';
+
+  // Read the photo file
+  fs.readFile(req.file.path, (err, data) => {
+    if (err) {
+      console.error('Error reading file:', err);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+
+    // Execute the query with parameters
+    connection.query(query, [data.toString('base64'), userId], (err, results) => {
+      if (err) {
+        console.error('Error updating user photo:', err);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+
+      // Return success message
+      res.status(200).json({ message: 'Photo uploaded successfully' });
+    });
+  });
 });
 
 // Define the validateFields middleware function
@@ -831,14 +899,25 @@ console.log(userId);
   });
  }
 });
-// Set up multer to handle file uploads
-const storage = multer.memoryStorage();
+
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    // Define the destination folder where images will be stored
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    // Define how file names will be generated
+    const userId = req.body.firstName + req.body.lastName; // Assuming user ID is sent in the request body
+    const filename = userId + path.extname(file.originalname);
+    cb(null, filename);
+  }
+});
 // list of sponsors
 // Set storage engine
-app.post('/sponsors', upload.single('photo'), (req, res) => {
+app.post('/sponsors', images.single('photo'), (req, res) => {
   // Extract the userId from request headers
   const userId = req.header('userId');
-
+  console.log(req.file);
   // Check if userId header is missing or empty
   if (!userId) {
     return res.status(400).json({ message: 'userId header is required' });
@@ -854,25 +933,32 @@ app.post('/sponsors', upload.single('photo'), (req, res) => {
   // Prepare the SQL query to insert data into the sponsors table
   let query = 'INSERT INTO sponsors (firstName, lastName, designation, area, photo) VALUES (?, ?, ?, ?, ?)';
   const queryParams = [firstName, lastName, designation, area];
-
+  var imagebase = ''
   // Check if a file was uploaded
   if (req.file) {
-    // Convert the photo buffer to base64 encoding
-    const base64Photo = req.file.buffer.toString('base64');
-    queryParams.push(base64Photo);
-  } else {
-    // If no photo was uploaded, provide a placeholder value (e.g., NULL) for the photo field
-    queryParams.push(null);
+    const imagePath = req.file.path;
+    fs.readFile(imagePath, (err, data) => {
+      if (err) {
+        console.error('Error reading file:', err);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      // console.log(data.toString('base64'));
+    imagebase = data.toString('base64');
+    connection.query('INSERT INTO sponsors (firstName, lastName, designation, area, photo) VALUES (?, ?, ?, ?, ?)', [firstName, lastName, designation, area, data.toString('base64')], (err, results) => {
+      if (err) {
+        console.error('Error adding sponsor:', err);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      // console.log(imagebase);
+      res.status(201).json({ message: 'Sponsor added successfully' });
+    })
+  })
+    // queryParams.push(base64Photo);
+  }else{
+    res.status(400).json({ message: 'Sponsor added Failed Need Image' });
   }
-
   // Execute the query with parameters
-  connection.query(query, queryParams, (err, results) => {
-    if (err) {
-      console.error('Error adding sponsor:', err);
-      return res.status(500).json({ message: 'Internal Server Error' });
-    }
-    res.status(201).json({ message: 'Sponsor added successfully' });
-  });
+  
 });
 
 // to fetch all the sponsors
@@ -916,40 +1002,45 @@ app.get('/sponsors/:userId?', (req, res) => {
 
 
 // add and display partners
-app.post('/partners', upload.single('photo'), (req, res) => {
+app.post('/partners', images.single('photo'), (req, res) => {
   const userId = req.header('userId'); // Extract the userId from request headers
+
   // Check if userId header is missing or empty
   if (!userId) {
     return res.status(400).json({ message: 'userId header is required' });
   }
+
   // Extract data from request body
   const { name, link } = req.body;
-  // Check if all required fields are provided
-  if (!name || !link) {
-    return res.status(400).json({ message: 'All fields are required' });
-  }
-  // Prepare the SQL query to insert data into the partners table
-  const query = 'INSERT INTO partners (name, link, photo) VALUES (?, ?, ?)';
-  // Execute the query with parameters
-  const queryParams = [name, link];
-  if (req.file) {
-    // Convert the photo buffer to base64 encoding
-    const base64Photo = req.file.buffer.toString('base64');
-    queryParams.push(base64Photo);
-  } else {
-    // If no photo was uploaded, provide a placeholder value (e.g., NULL) for the photo field
-    queryParams.push(null);
-  }
 
+  let query = 'INSERT INTO partners (name, link, photo) VALUES (?, ?, ?)';
+  const queryParams = [name, link];
+  var imagebase = ''
+  // Check if a file was uploaded
+  if (req.file) {
+    const imagePath = req.file.path;
+    fs.readFile(imagePath, (err, data) => {
+      if (err) {
+        console.error('Error reading file:', err);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      // console.log(data.toString('base64'));
+      imagebase = data.toString('base64');
+      connection.query(query, [name, link, data.toString('base64')], (err, results) => {
+        if (err) {
+          console.error('Error adding partner:', err);
+          return res.status(500).json({ message: 'Internal Server Error' });
+        }
+        // console.log(imagebase);
+        res.status(201).json({ message: 'partner added successfully' });
+      })
+    })
+  } else {
+    res.status(400).json({ message: 'partner added Failed Need Image' });
+  }
   // Execute the query with parameters
-  connection.query(query, queryParams, (err, results) => {
-    if (err) {
-      console.error('Error adding partner:', err);
-      return res.status(500).json({ message: 'Internal Server Error' });
-    }
-    res.status(201).json({ message: 'Partner added successfully' });
-  });
 });
+
 // GET endpoint to display all partners data
 app.get('/partners', (req, res) => {
   const userId = req.header('userId'); // Extract the userId from request headers
@@ -1135,6 +1226,36 @@ app.post('/update-status', (req, res) => {
       return res.status(500).send('Internal Server Error');
     }
     res.status(200).send('Status updated successfully');
+  });
+});
+
+app.post('/suggested-users', (req, res) => {
+  const userId = req.header('userId');
+ const {bloodGroup, coordinatesLatitude,coordinatesLongitude,} = req.body
+  if (!userId) {
+    return res.status(400).json({ message: 'userId header is required' });
+  }
+
+  // Fetch user's blood group and coordinates
+  connection.query('SELECT bloodGroup, coordinatesLatitude, coordinatesLongitude,userId FROM users WHERE bloodGroup = ?', [bloodGroup], (error, userResults) => {
+    if (error) {
+      console.error('Error fetching user data:', error);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+
+    
+
+    const coordinatesLatitudeParsed = parseFloat(coordinatesLatitude);
+    const coordinatesLongitudeParsed = parseFloat(coordinatesLongitude);
+
+    // Fetch suggested users with the same blood group
+  
+
+      // Filter suggested users by nearby locations
+      const suggestedUsers = findNearestCoordinates(coordinatesLatitudeParsed, coordinatesLongitudeParsed, userResults);
+
+      res.json({ suggestedUsers });
+   
   });
 });
 
