@@ -1259,6 +1259,27 @@ app.post('/suggested-users', (req, res) => {
   });
 });
 
+// all reportedIds should be store in db
+// POST endpoint to create notifications for raised reports
+app.post('/notifications', (req, res) => {
+  const { userId, Id, type, message, coordinatesLatitude, coordinatesLongitude } = req.body;
+
+  // Validate required fields
+  if (!userId || !Id || !type || !message || !coordinatesLatitude || !coordinatesLongitude) {
+      return res.status(400).json({ error: 'All fields are required' });
+  }
+  const notificationId = uuid.v4().substring(0, 8);  
+  const query = 'INSERT INTO notifications (notificationId, userId, Id, type, message, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?)';
+  connection.query(query, [notificationId, userId, Id, type, message, coordinatesLatitude, coordinatesLongitude], (error, result) => {
+      if (error) {
+          console.error('Error inserting notification:', error);
+          return res.status(500).json({ error: 'Internal Server Error' });
+      }
+      console.log('Notification created successfully');
+      res.status(201).json({ notificationId, userId, Id, type, message, coordinatesLatitude, coordinatesLongitude });
+  });
+});
+
 
 // Start the server
 app.listen(3000, () => {
