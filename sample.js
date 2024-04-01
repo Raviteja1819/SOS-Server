@@ -134,7 +134,7 @@ if (cluster.isMaster) {
     const photo = req.file ? req.file.buffer : null;
   
     // Check if all required fields are provided
-    if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !emergencyContact3 || !alternateNumber || !pincode || !confirmPassword || !certified || !coordinatesLatitude || !coordinatesLongitude) {
+    if (!firstName || !lastName || !mobileNumber || !email || !password || !dateOfBirth || !age || !gender || !bloodGroup || !address || !emergencyContact1 || !emergencyContact2 || !emergencyContact3 || !alternateNumber || !pincode || !confirmPassword || !coordinatesLatitude || !coordinatesLongitude) {
       return res.status(400).send('All fields are required');
     }
   
@@ -209,7 +209,7 @@ if (cluster.isMaster) {
             Promise.all(emergencyContactPromises)
               .then(() => {
                 // After successful signup, retrieve user details from the database (excluding passkey) and send in the response
-                const userDetailsQuery = 'SELECT firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude FROM users WHERE userId = ?';
+                const userDetailsQuery = 'SELECT userId,firstName, lastName, mobileNumber, email, dateOfBirth, age, gender, bloodGroup, address, alternateNumber, pincode, coordinatesLatitude, coordinatesLongitude FROM users WHERE userId = ?';
                 connection.query(userDetailsQuery, [userId], (err, userResults) => {
                   if (err) {
                     console.error('Error retrieving user details:', err);
@@ -221,7 +221,7 @@ if (cluster.isMaster) {
                   }
   
                   const user = userResults[0];
-                  res.status(201).json({ message: 'Account created successfully', user });
+                  res.status(201).json({ message: 'Account created successfully',user});
                 });
               })
               .catch(error => {
