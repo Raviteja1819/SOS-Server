@@ -698,21 +698,21 @@ app.get('/bloodEmergency/:userId?', (req, res) => {
 // blood requirements
 app.post('/blood-requirements', async (req, res) => {
   console.log(JSON.stringify(req.body));
-  const { userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+  const { userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress,location, purposeOfBlood, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
 
   // Generate unique Id
   const Id = uuid.v4().substring(0, 8); // Generating unique Id and extracting first 8 characters
 
   // Check if all required fields are provided
-  if (!userId || !patientName || !date || !time || !bloodType || !mobileNumber || !hospitalName || !hospitalAddress || !purposeOfBlood || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
+  if (!userId || !patientName || !date || !time || !bloodType || !mobileNumber || !hospitalName || !hospitalAddress ||!location|| !purposeOfBlood || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
     return res.status(400).send('All fields are required');
   }
   try {
     // Insert blood requirement into BloodRequirement table
     await new Promise((resolve, reject) => {
       connection.query(
-        'INSERT INTO bloodRequirement (Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status, coordinatesLatitude, coordinatesLongitude],
+        'INSERT INTO bloodRequirement (Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status,location, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?)',
+        [Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status,location, coordinatesLatitude, coordinatesLongitude],
         (error, results) => {
           if (error) {
             reject(error);
