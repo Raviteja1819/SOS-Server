@@ -109,6 +109,7 @@ if (cluster.isMaster) {
   // Signup route
   
   app.post('/signup', (req, res, next) => {
+    console.log(req.body);
     const {
       firstName,
       lastName,
@@ -140,7 +141,7 @@ if (cluster.isMaster) {
   
     // Check if password and confirmPassword match
     if (password !== confirmPassword) {
-      return res.status(400).send('Password and confirm password do not match');
+      return res.status(401).send('Password and confirm password do not match');
     }
   
     // Generate 28-character userID
@@ -221,7 +222,7 @@ if (cluster.isMaster) {
                   }
   
                   const user = userResults[0];
-                  res.status(201).json({ message: 'Account created successfully',user});
+                  res.status(200).json({ message: 'Account created successfully',user});
                 });
               })
               .catch(error => {
@@ -767,7 +768,7 @@ app.get('/blood-requirements/:id?', (req, res) => {
   // If an ID is provided in the URL, fetch a single blood requirement case by that ID
   if (req.params.id) {
     console.log('true');
-    connection.query('SELECT * FROM bloodRequirement WHERE Id = ? AND userId = ?', [req.params.id, userId], (error, results) => {
+    connection.query('SELECT * FROM bloodRequirement WHERE Id = ?', [req.params.id], (error, results) => {
       if (error) {
         console.error('Error retrieving blood requirement case:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
