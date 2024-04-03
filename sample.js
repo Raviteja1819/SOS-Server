@@ -431,8 +431,18 @@ function validateFields(req, res, next) {
 //  blood checkup creation
 app.post('/bloodcheckup', validateFields, (req, res, next) => {
   // Destructure fields from request body
-  const { userId, name, mobileNumber, time, place, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
-  
+  const {
+    userId,
+    name,
+    mobileNumber,
+    time,
+    place,
+    pincode,
+    status,
+    coordinatesLatitude,
+    coordinatesLongitude
+  } = req.body;
+
   // Check if any required field is missing
   if (!userId || !name || !mobileNumber || !time || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
     console.log('All fields are required');
@@ -464,8 +474,25 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
         console.error('Error inserting details into bloodCheckup:', error);
         return res.status(500).send('Internal Server Error');
       }
-      // Send response with the generated Id
-      res.status(201).json({ Id, message: 'Blood checkup created successfully' });
+
+      // Generate unique Id with 8 characters for notification
+      const notificationId = uuid.v4().substring(0, 8);
+      const message = 'Blood checkup required';
+      const type = 'bloodcheckup';
+
+      // Insert notification data into the database
+      connection.query(
+        'INSERT INTO notifications (Id,notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude, notified, `read`) VALUES (?,?, ?, ?, ?, ?, ?, false, false)',
+        [Id,notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude],
+        (error, result) => {
+          if (error) {
+            console.error('Error inserting details into notifications:', error);
+            return res.status(500).send('Error inserting notification data');
+          }
+          // Send response with the generated Id
+          res.status(201).json({ Id, message: 'Blood checkup created successfully' });
+        }
+      );
     }
   );
 });
@@ -524,47 +551,64 @@ app.get('/bloodcheckup/:id?', (req, res) => {
     });
   }
   // post anonymous reports
-  app.post('/anonymousreport', (req, res) => {
-    console.log(JSON.stringify(req.body));
-      const { reportedAccount,userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status } = req.body;
-    
-      // Validate if all fields are provided
-      if (!reportedAccount ||!userId || !date || !time || !placeOfIncident || !subject || !explainInBreif || !coordinatesLatitude || !coordinatesLongitude || !status) {
-        
-        return res.status(400).send('All fields are required');
+app.post('/anonymousreport', (req, res) => {
+  console.log(JSON.stringify(req.body));
+  const { reportedAccount, userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status } = req.body;
+
+  // Validate if all fields are provided
+  if (!reportedAccount || !userId || !date || !time || !placeOfIncident || !subject || !explainInBreif || !coordinatesLatitude || !coordinatesLongitude || !status) {
+    return res.status(400).send('All fields are required');
+  }
+
+  // Validate date format
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(date)) {
+    console.log('Invalid date format');
+    return res.status(400).send('Invalid date format. Date should be in YYYY-MM-DD format');
+  }
+
+  // Validate time format
+  const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
+  if (!timeRegex.test(time)) {
+    console.log('Invalid time format');
+    return res.status(400).send('Invalid time format. Time should be in HH:MM format (24-hour)');
+  }
+
+  // Generate unique 8-character ID
+  const Id = uuid.v4().substring(0, 8);
+
+  // Insert report data into the database
+  connection.query(
+    'INSERT INTO anonymousReport (Id, reportedAccount, userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [Id, reportedAccount, userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status],
+    (error, result) => {
+      if (error) {
+        console.error('Error inserting details into anonymousReport:', error);
+        return res.status(500).send('Internal Server Error');
       }
-    
-      // Validate date format
-      const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
-      if (!dateRegex.test(date)) {
-        console.log('Invalid date format');
-        return res.status(400).send('Invalid date format. Date should be in YYYY-MM-DD format');
-      }
-    
-      // Validate time format
-      const timeRegex = /^([01]\d|2[0-3]):([0-5]\d)$/;
-      if (!timeRegex.test(time)) {
-        console.log('Invalid time format');
-        return res.status(400).send('Invalid time format. Time should be in HH:MM format (24-hour)');
-      }
-    
-      // Generate unique 8-character ID
-      const Id = uuid.v4().substring(0, 8);
-    
-      // Insert report data into the database
+
+      // Generate unique Id with 8 characters for notification
+      const notificationId = uuid.v4().substring(0, 8);
+      const message = explainInBreif; // Use explainInBreif as message
+      const type = 'anonymousReport';
+
+      // Insert notification data into the database
       connection.query(
-        'INSERT INTO anonymousReport (Id, reportedAccount,userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status) VALUES (?, ?,?, ?, ?, ?, ?, ?, ?, ?, ?)',
-        [Id, reportedAccount,userId, date, time, placeOfIncident, subject, explainInBreif, coordinatesLatitude, coordinatesLongitude, status],
+        'INSERT INTO notifications (Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude, notified, `read`) VALUES (?, ?, ?, ?, ?, ?, ?, false, false)',
+        [Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude],
         (error, result) => {
           if (error) {
-            console.error('Error inserting details into anonymousReport:', error);
-            return res.status(500).send('Internal Server Error');
+            console.error('Error inserting details into notifications:', error);
+            return res.status(500).send('Error inserting notification data');
           }
           console.log('Anonymous report submitted successfully');
           res.status(201).send('Report submitted successfully!');
         }
       );
-  });
+    }
+  );
+});
+
   // app.get('/anonymousreport', (req, res) => {
   //   const userId = req.header('userId'); // Extract the userId from request headers
   //   if (!userId) {
@@ -642,8 +686,23 @@ app.post('/blood-emergency', (req, res) => {
             console.error('Error inserting blood emergency request:', error);
             return res.status(500).send('Internal Server Error');
         }
+         // Generate unique Id with 8 characters for notification
+      const notificationId = uuid.v4().substring(0, 8);
+      const message = purposeOfBlood; 
+      const type = 'bloodEmergency';
+
+      // Insert notification data into the database
+      connection.query(
+        'INSERT INTO notifications (Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude, notified, `read`) VALUES (?, ?, ?, ?, ?, ?, ?, false, false)',
+        [Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude],
+        (error, result) => {
+          if (error) {
+            console.error('Error inserting details into notifications:', error);
+            return res.status(500).send('Error inserting notification data');
+          }
         res.status(201).send('Blood emergency request submitted successfully!');
     });
+});
 });
 
 app.get('/blood-emergency', (req, res) => {
@@ -699,21 +758,21 @@ app.get('/bloodEmergency/:userId?', (req, res) => {
 // blood requirements
 app.post('/blood-requirements', async (req, res) => {
   console.log(JSON.stringify(req.body));
-  const { userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress,location, purposeOfBlood, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
+  const { userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, location, purposeOfBlood, pincode, status, coordinatesLatitude, coordinatesLongitude } = req.body;
 
   // Generate unique Id
   const Id = uuid.v4().substring(0, 8); // Generating unique Id and extracting first 8 characters
 
   // Check if all required fields are provided
-  if (!userId || !patientName || !date || !time || !bloodType || !mobileNumber || !hospitalName || !hospitalAddress ||!location|| !purposeOfBlood || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
+  if (!userId || !patientName || !date || !time || !bloodType || !mobileNumber || !hospitalName || !hospitalAddress || !location || !purposeOfBlood || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
     return res.status(400).send('All fields are required');
   }
   try {
     // Insert blood requirement into BloodRequirement table
     await new Promise((resolve, reject) => {
       connection.query(
-        'INSERT INTO bloodRequirement (Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status,location, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?,?, ?, ?, ?, ?, ?, ?, ?)',
-        [Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status,location, coordinatesLatitude, coordinatesLongitude],
+        'INSERT INTO bloodRequirement (Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status, location, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        [Id, userId, patientName, date, time, bloodType, mobileNumber, hospitalName, hospitalAddress, purposeOfBlood, pincode, status, location, coordinatesLatitude, coordinatesLongitude],
         (error, results) => {
           if (error) {
             reject(error);
@@ -723,6 +782,27 @@ app.post('/blood-requirements', async (req, res) => {
         }
       );
     });
+
+    // Generate unique Id with 8 characters for notification
+    const notificationId = uuid.v4().substring(0, 8);
+    const message = purposeOfBlood;
+    const type = 'bloodRequirement';
+
+    // Insert notification data into the database
+    await new Promise((resolve, reject) => {
+      connection.query(
+        'INSERT INTO notifications (Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude, notified, `read`) VALUES (?, ?, ?, ?, ?, ?, ?, false, false)',
+        [Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude],
+        (error, result) => {
+          if (error) {
+            reject(error);
+          } else {
+            resolve(result);
+          }
+        }
+      );
+    });
+
     res.status(201).send('Blood requirement created');
   } catch (error) {
     console.error('Error creating blood requirement:', error);
@@ -827,11 +907,26 @@ app.get('/blood-requirements/:id?', (req, res) => {
         console.error('Error inserting callback request:', error);
         return res.status(500).send('Internal Server Error');
       }
+      // Generate unique Id with 8 characters for notification
+      const notificationId = uuid.v4().substring(0, 8);
+      const message = topicToSpeakAbout; // Use explainInBreif as message
+      const type = 'callbackRequest';
+
+      // Insert notification data into the database
+      connection.query(
+        'INSERT INTO notifications (Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude, notified, `read`) VALUES (?, ?, ?, ?, ?, ?, ?, false, false)',
+        [Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude],
+        (error, result) => {
+          if (error) {
+            console.error('Error inserting details into notifications:', error);
+            return res.status(500).send('Error inserting notification data');
+          }
       console.log('Callback request inserted successfully');
       res.status(201).send('Callback request received');
     }
   );
 });
+  });
 // Endpoint to retrieve all callback requests
 app.get('/callback/:id?', (req, res) => {
   console.log('entered');
@@ -1109,10 +1204,25 @@ app.post('/reportedissues', (req, res) => {
         console.error('Error inserting details into reportIssue:', error);
         return res.status(500).send('Internal Server Error');
       }
+      // Generate unique Id with 8 characters for notification
+      const notificationId = uuid.v4().substring(0, 8);
+      const message = explainInBreif; // Use explainInBreif as message
+      const type = 'reportedissues';
+
+      // Insert notification data into the database
+      connection.query(
+        'INSERT INTO notifications (Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude, notified, `read`) VALUES (?, ?, ?, ?, ?, ?, ?, false, false)',
+        [Id, notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude],
+        (error, result) => {
+          if (error) {
+            console.error('Error inserting details into notifications:', error);
+            return res.status(500).send('Error inserting notification data');
+          }
       console.log('Issue report submitted successfully');
       res.status(201).send('Report submitted successfully!');
     }
   );
+});
 });
 // fetch the reported issues
 app.get('/reportedissues/:userId?', (req, res) => {
@@ -1146,39 +1256,61 @@ app.get('/reportedissues/:userId?', (req, res) => {
     });
   }
 });
-// notifications
+// // notifications
+// app.post('/notification', (req, res) => {
+//   console.log(JSON.stringify(req.body));
+//   const { userId, type, message, coordinatesLatitude, coordinatesLongitude } = req.body;
+//   if (!userId || !type || !message || !coordinatesLatitude || !coordinatesLongitude) {
+//     return res.status(400).json({ error: 'userId, type, message, coordinatesLatitude, coordinatesLongitude are required fields' });
+//   }
+//   const notificationId = uuidv4().substring(0, 8); // Generate unique notification ID using uuidv4()
+//   const insertQuery = 'INSERT INTO notifications (notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude , notified , read) VALUES (?, ?, ?, ?, ?, ?, false , false)';
+//   connection.query(insertQuery, [notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude], (error, results) => {
+//     if (error) {
+//       console.error('Error inserting notification:', error);
+//       return res.status(500).json({ error: 'Internal server error' });
+//     }
+//     res.status(201).json({ message: 'Notification created successfully', notificationId });
+//   });
+// });
 
-app.post('/notification', (req, res) => {
-  console.log(JSON.stringify(req.body));
-  const { userId, type, message, coordinatesLatitude, coordinatesLongitude } = req.body;
-  if (!userId || !type || !message || !coordinatesLatitude || !coordinatesLongitude) {
-    return res.status(400).json({ error: 'userId, type, message, coordinatesLatitude, coordinatesLongitude are required fields' });
-  }
-  const notificationId = uuid.v4().substring(0, 8); // Assuming generateNotificationId() is a function that generates a unique ID
-  const insertQuery = 'INSERT INTO notifications (notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?)';
-  connection.query(insertQuery, [notificationId, userId, type, message, coordinatesLatitude, coordinatesLongitude], (error, results) => {
+//  update notification status
+app.put('/notifications/:notificationId', (req, res) => {
+  const notificationId = req.params.notificationId;
+  const { notified, read } = req.body;
+  const notifiedBool = notified === 'True' ? 1 : 0;
+  const readBool = read === 'True' ? 1 : 0;
+  const query = 'UPDATE notifications SET notified = ?, `read` = ? WHERE notificationId = ?';
+  connection.query(query, [notifiedBool, readBool, notificationId], (error, result) => {
     if (error) {
-      console.error('Error inserting notification:', error);
-      return res.status(500).json({ error: 'Internal server error' });
+      console.error('Error updating notification status:', error);
+      return res.status(500).json({ error: 'Internal Server Error' });
     }
-    res.status(201).json({ message: 'Notification created successfully', notificationId });
+    if (result.affectedRows === 0) {
+      return res.status(404).json({ error: 'Notification not found' });
+    }
+    console.log('Notification status updated successfully');
+    res.status(200).json({ message: 'Notification status updated successfully' });
   });
 });
-
-// fetch notifications
-app.get('/notification', (req, res) => {
-  console.log('entered');
-  const userId = req.header('userId');
-  if (!userId) {
-    return res.status(400).json({ error: 'userId header is required' });
+// fetch notifications 
+app.get('/notifications', (req, res) => {
+  const userId = req.query.userId; 
+  let query = 'SELECT * FROM notifications';
+  let queryParams = [];
+  if (userId) {
+    query += ' WHERE userId = ?';
+    queryParams.push(userId);
   }
-  const query = 'SELECT userId ,notificationId, type, message, coordinatesLatitude, coordinatesLongitude FROM notifications WHERE userId != ?';
-  connection.query(query, userId, (error, results) => {
+  connection.query(query, queryParams, (error, results) => {
     if (error) {
       console.error('Error retrieving notifications:', error);
       return res.status(500).json({ error: 'Internal Server Error' });
     }
-    res.json(results);
+    if (results.length === 0) {
+      return res.status(404).json({ error: 'No notifications found' });
+    }
+    res.status(200).json(results);
   });
 });
 
@@ -1243,44 +1375,15 @@ app.post('/suggested-users', (req, res) => {
       console.error('Error fetching user data:', error);
       return res.status(500).json({ message: 'Internal Server Error' });
     }
-
-    
-
     const coordinatesLatitudeParsed = parseFloat(coordinatesLatitude);
     const coordinatesLongitudeParsed = parseFloat(coordinatesLongitude);
-
     // Fetch suggested users with the same blood group
-  
-
       // Filter suggested users by nearby locations
       const suggestedUsers = findNearestCoordinates(coordinatesLatitudeParsed, coordinatesLongitudeParsed, userResults);
-
       res.json({ suggestedUsers });
-   
+
   });
 });
-
-// all reportedIds should be store in db
-// POST endpoint to create notifications for raised reports
-app.post('/notifications', (req, res) => {
-  const { userId, Id, type, message, coordinatesLatitude, coordinatesLongitude } = req.body;
-
-  // Validate required fields
-  if (!userId || !Id || !type || !message || !coordinatesLatitude || !coordinatesLongitude) {
-      return res.status(400).json({ error: 'All fields are required' });
-  }
-  const notificationId = uuid.v4().substring(0, 8);  
-  const query = 'INSERT INTO notifications (notificationId, userId, Id, type, message, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?)';
-  connection.query(query, [notificationId, userId, Id, type, message, coordinatesLatitude, coordinatesLongitude], (error, result) => {
-      if (error) {
-          console.error('Error inserting notification:', error);
-          return res.status(500).json({ error: 'Internal Server Error' });
-      }
-      console.log('Notification created successfully');
-      res.status(201).json({ notificationId, userId, Id, type, message, coordinatesLatitude, coordinatesLongitude });
-  });
-});
-
 
 // Start the server
 app.listen(3000, () => {
