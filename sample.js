@@ -8,6 +8,7 @@ const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 const fs = require('fs');
+const fsExtra = require('fs-extra')
 const { sin, cos, sqrt, atan2 } = require('mathjs');
 
 function degreesToRadians(degrees) {
@@ -51,7 +52,7 @@ if (cluster.isMaster) {
   });
 } else {
   const app = express();
-  const images = multer({ dest: 'images/' });
+  const images = multer({ dest: 'images/'});
   const certificates = multer({dest : 'certificates/'})
   // Middleware
   app.use(cors());
@@ -141,7 +142,7 @@ if (cluster.isMaster) {
   
     // Check if password and confirmPassword match
     if (password !== confirmPassword) {
-      return res.status(401).send('Password and confirm password do not match');
+      return res.status(400).send('Password and confirm password do not match');
     }
   
     // Generate 28-character userID
@@ -263,7 +264,7 @@ app.put('/contacts/:id', (req, res) => {
             return;
         }
         if (results.length === 0) {
-            res.status(401).json({ message: 'Invalid email/phone number or password' });
+            res.status(400).json({ message: 'Invalid email/phone number or password' });
             return;
         }
 
@@ -284,12 +285,19 @@ app.put('/contacts/:id', (req, res) => {
                 email: user.email,
                 address: user.address,
                 alternateNumber: user.alternateNumber,
-                pincode: user.pincode
+                pincode: user.pincode,
+                bloodGroup:user.bloodGroup,
+                dateOfBirth:user.dateOfBirth,
+                age:user.age,
+                gender:user.gender,
+                coordinatesLatitude:user.coordinatesLatitude,
+                coordinatesLongitude:user.coordinatesLongitude,
+                photo: user.photo
             };
             res.status(200).json({ message: 'Login successful', user: userWithoutPasskey });
         } else {
                 // Passwords don't match
-                res.status(401).json({ message: 'Invalid email/phone number or password' });
+                res.status(400).json({ message: 'Invalid email/phone number or password' });
             }
         });
     });
@@ -327,7 +335,7 @@ app.post('/update-password', (req, res) => {
 
           if (!match) {
               // Old password doesn't match
-              res.status(401).json({ message: 'Old password is incorrect' });
+              res.status(400).json({ message: 'Old password is incorrect' });
               return;
           }
 
@@ -435,7 +443,6 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
     userId,
     name,
     mobileNumber,
-    time,
     place,
     pincode,
     status,
@@ -444,7 +451,7 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
   } = req.body;
 
   // Check if any required field is missing
-  if (!userId || !name || !mobileNumber || !time || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
+  if (!userId || !name || !mobileNumber || !place || !pincode || !status || !coordinatesLatitude || !coordinatesLongitude) {
     console.log('All fields are required');
     return res.status(400).json({ error: 'All fields are required' });
   }
@@ -454,7 +461,6 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
     userId,
     name,
     mobileNumber,
-    time,
     place,
     pincode,
     status,
@@ -467,8 +473,8 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
 
   // Insert blood checkup data into the database
   connection.query(
-    'INSERT INTO bloodCheckup (Id, userId, name, time, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    [Id, userId, name, time, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude],
+    'INSERT INTO bloodCheckup (Id, userId, name, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude) VALUES ( ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [Id, userId, name, mobileNumber, place, status, pincode, coordinatesLatitude, coordinatesLongitude],
     (error, result) => {
       if (error) {
         console.error('Error inserting details into bloodCheckup:', error);
@@ -490,7 +496,7 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
             return res.status(500).send('Error inserting notification data');
           }
           // Send response with the generated Id
-          res.status(201).json({ Id, message: 'Blood checkup created successfully' });
+          res.status(200).json({ Id, message: 'Blood checkup created successfully' });
         }
       );
     }
@@ -602,7 +608,7 @@ app.post('/anonymousreport', (req, res) => {
             return res.status(500).send('Error inserting notification data');
           }
           console.log('Anonymous report submitted successfully');
-          res.status(201).send('Report submitted successfully!');
+          res.status(200).send('Report submitted successfully!');
         }
       );
     }
@@ -700,7 +706,7 @@ app.post('/blood-emergency', (req, res) => {
             console.error('Error inserting details into notifications:', error);
             return res.status(500).send('Error inserting notification data');
           }
-        res.status(201).send('Blood emergency request submitted successfully!');
+        res.status(200).send('Blood emergency request submitted successfully!');
     });
 });
 });
@@ -803,7 +809,7 @@ app.post('/blood-requirements', async (req, res) => {
       );
     });
 
-    res.status(201).send('Blood requirement created');
+    res.status(200).send('Blood requirement created');
   } catch (error) {
     console.error('Error creating blood requirement:', error);
     res.status(500).send('Internal Server Error');
@@ -817,7 +823,7 @@ app.post('/blood-requirements', async (req, res) => {
 
 //     // Check if userId is provided in headers
 //     if (!userId) {
-//       return res.status(401).json({ message: 'userId parameter is required in headers' });
+//       return res.status(400).json({ message: 'userId parameter is required in headers' });
 //     }
 
 //     // Retrieve all blood requirements for a specific user from the BloodRequirement table
@@ -922,7 +928,7 @@ app.get('/blood-requirements/:id?', (req, res) => {
             return res.status(500).send('Error inserting notification data');
           }
       console.log('Callback request inserted successfully');
-      res.status(201).send('Callback request received');
+      res.status(200).send('Callback request received');
     }
   );
 });
@@ -1019,8 +1025,12 @@ app.post('/sponsors', images.single('photo'), (req, res) => {
     return res.status(400).json({ message: 'userId header is required' });
   }
 
-  const { firstName, lastName, designation, area } = req.body;
-
+  // const { firstName, lastName, designation, area } = req.body;
+const firstName = req.body["firstName"][0]
+const lastName = req.body["lastName"][0]
+const designation = req.body["designation"][0]
+const area = req.body["firstName"][0]
+  console.log(req.body);
   // Check if all required fields are provided
   if (!firstName || !lastName || !designation || !area) {
     return res.status(400).json({ message: 'All fields are required' });
@@ -1030,9 +1040,11 @@ app.post('/sponsors', images.single('photo'), (req, res) => {
   let query = 'INSERT INTO sponsors (firstName, lastName, designation, area, photo) VALUES (?, ?, ?, ?, ?)';
   const queryParams = [firstName, lastName, designation, area];
   var imagebase = ''
+  var id = uuid.v4().substring(0, 8);
   // Check if a file was uploaded
   if (req.file) {
     const imagePath = req.file.path;
+    console.log(imagePath);
     fs.readFile(imagePath, (err, data) => {
       if (err) {
         console.error('Error reading file:', err);
@@ -1040,13 +1052,18 @@ app.post('/sponsors', images.single('photo'), (req, res) => {
       }
       // console.log(data.toString('base64'));
     imagebase = data.toString('base64');
-    connection.query('INSERT INTO sponsors (firstName, lastName, designation, area, photo) VALUES (?, ?, ?, ?, ?)', [firstName, lastName, designation, area, data.toString('base64')], (err, results) => {
+    connection.query('INSERT INTO sponsors (id, firstName, lastName, designation, area, photo) VALUES (?, ?, ?, ?, ?, ?)', [id,firstName, lastName, designation, area, data.toString('base64')], (err, results) => {
+      console.log(id,firstName, lastName, designation, area);
       if (err) {
-        console.error('Error adding sponsor:', err);
+        console.error('Error adding sponsor:',err.message);
         return res.status(500).json({ message: 'Internal Server Error' });
       }
       // console.log(imagebase);
-      res.status(201).json({ message: 'Sponsor added successfully' });
+      // fsExtra.remove(path.join(__dirname, imagePath), err => {
+      //   if (err) return console.error(err)
+      //   console.log('success!')
+      // })
+      res.status(200).json({ message: 'Sponsor added successfully' });
     })
   })
     // queryParams.push(base64Photo);
@@ -1072,7 +1089,7 @@ app.get('/sponsors/:userId?', (req, res) => {
   // Retrieve all sponsors or a single sponsor based on the presence of userId parameter
   if (req.params.userId) {
       console.log('true');
-      const query = 'SELECT * FROM sponsors WHERE userId = ?';
+      const query = 'SELECT * FROM sponsors WHERE id = ?';
       connection.query(query, req.params.userId, (error, results) => {
           if (error) {
               console.error('Error retrieving sponsors:', error);
@@ -1128,7 +1145,7 @@ app.post('/partners', images.single('photo'), (req, res) => {
           return res.status(500).json({ message: 'Internal Server Error' });
         }
         // console.log(imagebase);
-        res.status(201).json({ message: 'partner added successfully' });
+        res.status(200).json({ message: 'partner added successfully' });
       })
     })
   } else {
@@ -1219,7 +1236,7 @@ app.post('/reportedissues', (req, res) => {
             return res.status(500).send('Error inserting notification data');
           }
       console.log('Issue report submitted successfully');
-      res.status(201).send('Report submitted successfully!');
+      res.status(200).send('Report submitted successfully!');
     }
   );
 });
@@ -1270,7 +1287,7 @@ app.get('/reportedissues/:userId?', (req, res) => {
 //       console.error('Error inserting notification:', error);
 //       return res.status(500).json({ error: 'Internal server error' });
 //     }
-//     res.status(201).json({ message: 'Notification created successfully', notificationId });
+//     res.status(200).json({ message: 'Notification created successfully', notificationId });
 //   });
 // });
 
