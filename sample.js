@@ -1169,48 +1169,47 @@ app.get('/sponsors/:userId?', (req, res) => {
   }
 });
 
-
 // add and display partners
-app.post('/partners', images.single('photo'), (req, res) => {
-  const userId = req.header('userId'); // Extract the userId from request headers
-
-  // Check if userId header is missing or empty
-  if (!userId) {
-    return res.status(400).json({ message: 'userId header is required' });
-  }
-
-  // Extract data from request body
-  const { name, link } = req.body;
-  if(!name||!link) {
-    return res.status(400).send('All fields are required');
-  }
-  let query = 'INSERT INTO partners (name, link, photo) VALUES (?, ?, ?)';
-  const queryParams = [name, link];
-  var imagebase = ''
-  // Check if a file was uploaded
-  if (req.file) {
+app.post('/partners', images.single('photo'), async (req, res) => {
+  try {
+    // Extract the userId from request headers
+    const userId = req.header('userId');
+    if (!userId) {
+      return res.status(400).json({ message: 'userId header is required' });
+    }
+    const { name, link } = req.body;
+    console.log(req.body);
+    if (!name || !link) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+    // Check if a file was uploaded
+    if (!req.file) {
+      return res.status(400).json({ message: 'Partner addition failed. Image is required.' });
+    }
     const imagePath = req.file.path;
-    fs.readFile(imagePath, (err, data) => {
+    // Read the uploaded file and convert it to base64
+    const data = await fs.promises.readFile(imagePath);
+    const base64Photo = data.toString('base64');
+    const query = 'INSERT INTO partners (id, name, link, photo) VALUES (?, ?, ?, ?)';
+    const id = uuid.v4().substring(0, 8);
+
+    const queryParams = [id, name, link, base64Photo];
+    connection.query(query, queryParams, (err) => {
+      console.log(imagePath);
       if (err) {
-        console.error('Error reading file:', err);
+        console.error('Error adding partner:', err);
         return res.status(500).json({ message: 'Internal Server Error' });
       }
-      // console.log(data.toString('base64'));
-      imagebase = data.toString('base64');
-      connection.query(query, [name, link, data.toString('base64')], (err, results) => {
-        if (err) {
-          console.error('Error adding partner:', err);
-          return res.status(500).json({ message: 'Internal Server Error' });
-        }
-        // console.log(imagebase);
-        res.status(200).json({ message: 'partner added successfully' });
-      })
-    })
-  } else {
-    res.status(400).json({ message: 'partner added Failed Need Image' });
+
+      res.status(200).json({ message: 'Partner added successfully' });
+    });
+
+  } catch (error) {
+    console.error('Error processing request:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
-  // Execute the query with parameters
 });
+
 
 // GET endpoint to display all partners data
 app.get('/partners', (req, res) => {
