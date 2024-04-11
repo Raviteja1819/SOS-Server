@@ -1131,43 +1131,63 @@ const area = req.body["area"]
 });
 
 // to fetch all the sponsors
-app.get('/sponsors/:userId?', (req, res) => {
-  console.log('entered');
+app.get('/sponsors/:Id?', (req, res) => {
+  console.log('Entered endpoint');
 
   // Extract the userId from request headers
   const userId = req.header('userId');
 
   // Check if userId header is missing or empty
   if (!userId) {
-      return res.status(400).json({ message: 'userId header is required' });
+    return res.status(400).json({ message: 'userId header is required' });
   }
 
-  // Retrieve all sponsors or a single sponsor based on the presence of userId parameter
-  if (req.params.userId) {
-      console.log('true');
-      const query = 'SELECT * FROM sponsors WHERE id = ?';
-      connection.query(query, req.params.userId, (error, results) => {
-          if (error) {
-              console.error('Error retrieving sponsors:', error);
-              return res.status(500).send('Internal Server Error');
-          }
-          if (results.length === 0) {
-              return res.status(404).json({ message: 'Sponsors not found' });
-          }
-          res.json(results[0]);
-      });
+  // Check if an `Id` parameter is provided in the URL
+  const Id = req.params.Id;
+
+  if (Id) {
+    // Fetch a single sponsor by `Id`
+    console.log('Fetching single sponsor with ID:', Id);
+
+    // Prepare the SQL query to fetch a single sponsor by `Id`
+    const query = 'SELECT * FROM sponsors WHERE Id = ?';
+    const queryParams = [Id];
+
+    // Execute the query
+    connection.query(query, queryParams, (error, results) => {
+      if (error) {
+        console.error('Error retrieving sponsor:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+
+      // Check if a sponsor was found
+      if (results.length === 0) {
+        return res.status(404).json({ message: 'Sponsor not found' });
+      }
+
+      // Return the single sponsor as a JSON response
+      res.status(200).json(results[0]);
+    });
   } else {
-      console.log('false');
-      const query = 'SELECT * FROM sponsors';
-      connection.query(query, (error, results) => {
-          if (error) {
-              console.error('Error fetching sponsors:', error);
-              return res.status(500).json({ message: 'Internal server error' });
-          }
-          res.status(200).json(results);
-      });
+    // Fetch all sponsors
+    console.log('Fetching all sponsors');
+
+    // Prepare the SQL query to fetch all sponsors
+    const query = 'SELECT * FROM sponsors';
+
+    // Execute the query
+    connection.query(query, (error, results) => {
+      if (error) {
+        console.error('Error fetching sponsors:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+
+      // Return all sponsors as a JSON response
+      res.status(200).json(results);
+    });
   }
 });
+
 
 // add and display partners
 app.post('/partners', images.single('photo'), async (req, res) => {
@@ -1212,22 +1232,52 @@ app.post('/partners', images.single('photo'), async (req, res) => {
 
 
 // GET endpoint to display all partners data
-app.get('/partners', (req, res) => {
-  const userId = req.header('userId'); // Extract the userId from request headers
+app.get('/partners/:id?', (req, res) => {
+  console.log('entered');
+
+  // Extract the userId from request headers
+  const userId = req.header('userId');
+
   // Check if userId header is missing or empty
   if (!userId) {
     return res.status(400).json({ message: 'userId header is required' });
   }
-  // Prepare the SQL query to select all data from the partners table
-  const query = 'SELECT * FROM partners';
-  // Execute the query
-  connection.query(query, (err, results) => {
-    if (err) {
-      console.error('Error fetching partners:', err);
-      return res.status(500).json({ message: 'Internal Server Error' });
-    }
-    res.status(200).json(results);
-  });
+
+  // Retrieve either all partners or a single partner based on the presence of the `id` parameter
+  if (req.params.id) {
+    console.log('Fetching single partner');
+
+    // Prepare the SQL query to fetch a single partner by `id`
+    const query = 'SELECT * FROM partners WHERE id = ? ';
+    const queryParams = [req.params.id];
+
+    connection.query(query, queryParams, (error, results) => {
+      if (error) {
+        console.error('Error retrieving partner:', error);
+        return res.status(500).send('Internal Server Error');
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ message: 'Partner not found' });
+      }
+      // Return the single partner as a JSON response
+      res.status(200).json(results[0]);
+    });
+  } else {
+    console.log('Fetching all partners');
+
+    // Prepare the SQL query to fetch all partners for the given userId
+    const query = 'SELECT * FROM partners ';
+    const queryParams = [userId];
+
+    connection.query(query, queryParams, (error, results) => {
+      if (error) {
+        console.error('Error fetching partners:', error);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      // Return all partners as a JSON response
+      res.status(200).json(results);
+    });
+  }
 });
 
 // report an issue
