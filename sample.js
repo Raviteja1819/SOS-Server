@@ -4,6 +4,9 @@ const express = require('express');
 const multer = require('multer');
 const uuid = require('uuid');
 const cors = require('cors');
+const http = require('http');
+const { Server } = require('socket.io');
+const path = require('path');
 const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
@@ -63,6 +66,7 @@ if (cluster.isMaster) {
     next();
   });
   app.use(bodyParser.json());
+  
   // mysql connection
   const connection = mysql.createConnection({
     host: '45.112.49.217',
@@ -81,6 +85,55 @@ if (cluster.isMaster) {
 
   // Middleware to parse JSON bodies
   app.use(express.json());
+  const server = http.createServer(app);
+const io = new Server(server);
+//realtime voice recording
+const recordingsDirectory = path.join(__dirname, 'recordings');
+if (!fs.existsSync(recordingsDirectory)) {
+    fs.mkdirSync(recordingsDirectory);
+}
+
+// Serve static files from 'public' directory (optional)
+app.use(express.static('public'));
+
+// Handle socket connections
+io.on('connection', (socket) => {
+    console.log('A user connected:', socket.id);
+
+    // Listen for 'voice' events
+    socket.on('voice', (data) => {
+        console.log('Received voice stream from:', socket.id);
+
+        // Extract the user ID and voice data from the event
+        const { userId, voiceStream } = data;
+
+        // Create a readable stream from the voice data
+        const voiceBuffer = Buffer.from(voiceStream);
+
+        // Create a file name based on the user ID and current timestamp
+        const fileName = `${userId}_${Date.now()}.webm`; // Adjust the file extension as needed
+
+        // Define the file path where the recording will be saved
+        const filePath = path.join(recordingsDirectory, fileName);
+
+        // Save the voice recording to the file
+        fs.writeFile(filePath, voiceBuffer, (err) => {
+            if (err) {
+                console.error('Error saving voice recording:', err);
+                socket.emit('uploadError', { message: 'Error saving voice recording' });
+            } else {
+                console.log('Voice recording saved successfully:', filePath);
+                // Send the file path back to the client
+                socket.emit('uploadSuccess', { filePath });
+            }
+        });
+    });
+
+    // Handle disconnect
+    socket.on('disconnect', () => {
+        console.log('A user disconnected:', socket.id);
+    });
+});
 
   // Generating the userID
   function generateUserId() {
@@ -178,7 +231,6 @@ if (cluster.isMaster) {
   
             // Insert emergency contact information into 'emergencyContacts' table
             const emergencyContacts = [emergencyContact1, emergencyContact2, emergencyContact3].filter(contact => contact);
-  
             // Check if there are less than 2 or more than 3 emergency contacts
             if (emergencyContacts.length < 2 || emergencyContacts.length > 3) {
               return res.status(400).json({ error: 'At least two and no more than three emergency contacts are required' });
@@ -201,13 +253,17 @@ if (cluster.isMaster) {
                       console.error('Error inserting emergency contact:', error);
                       reject(error);
                     } else {
+                      console.log('Emergency contact inserted:', contact);
                       resolve(results);
                     }
                   }
-                );
+                  );
               });
             });
+                
   
+            
+          
             Promise.all(emergencyContactPromises)
               .then(() => {
                 // After successful signup, retrieve user details from the database (excluding passkey) and send in the response
@@ -361,7 +417,7 @@ app.post('/update-password', (req, res) => {
       });
   });
 });
-
+   
 
 // update profile data
 app.put('/users', (req, res) => {
@@ -1403,6 +1459,46 @@ app.post('/suggested-users', (req, res) => {
 
   });
 });
+
+// fetch all in single route
+
+app.post('/data', async (req, res) => {
+  try {
+    const { tableName, userId } = req.body;
+
+    if (!tableName) {
+      return res.status(400).json({ message: 'tableName parameter is required in the request body' });
+    }
+
+    let sql = `SELECT * FROM ${tableName}`;
+    let params = [];
+
+    if (userId) {
+      sql += ' WHERE userId = ?';
+      params.push(userId);
+    }
+
+    const tableData = await queryDatabase(sql, params);
+
+    res.status(200).json({ [tableName]: tableData });
+  } catch (error) {
+    console.error('Error:', error);
+    res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+// Function to execute SQL queries asynchronously
+function queryDatabase(sql, params = []) {
+  return new Promise((resolve, reject) => {
+    connection.query(sql, params, (error, results) => {
+      if (error) {
+        reject(error);
+      } else {
+        resolve(results);
+      }
+    });
+  });
+}
 
 // Start the server
 app.listen(3000, () => {
