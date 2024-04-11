@@ -1026,10 +1026,10 @@ app.post('/sponsors', images.single('photo'), (req, res) => {
   }
 
   // const { firstName, lastName, designation, area } = req.body;
-const firstName = req.body["firstName"][0]
-const lastName = req.body["lastName"][0]
-const designation = req.body["designation"][0]
-const area = req.body["firstName"][0]
+const firstName = req.body["firstName"]
+const lastName = req.body["lastName"]
+const designation = req.body["designation"]
+const area = req.body["area"]
   console.log(req.body);
   // Check if all required fields are provided
   if (!firstName || !lastName || !designation || !area) {
@@ -1125,7 +1125,9 @@ app.post('/partners', images.single('photo'), (req, res) => {
 
   // Extract data from request body
   const { name, link } = req.body;
-
+  if(!name||!link) {
+    return res.status(400).send('All fields are required');
+  }
   let query = 'INSERT INTO partners (name, link, photo) VALUES (?, ?, ?)';
   const queryParams = [name, link];
   var imagebase = ''
