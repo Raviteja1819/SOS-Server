@@ -1171,23 +1171,42 @@ app.get('/sponsors/:Id?', (req, res) => {
   } else {
     // Fetch all sponsors
     console.log('Fetching all sponsors');
-
-    // Prepare the SQL query to fetch all sponsors
     const query = 'SELECT * FROM sponsors';
 
-    // Execute the query
     connection.query(query, (error, results) => {
       if (error) {
         console.error('Error fetching sponsors:', error);
         return res.status(500).json({ message: 'Internal Server Error' });
       }
-
-      // Return all sponsors as a JSON response
       res.status(200).json(results);
     });
   }
 });
 
+// delete sponsors 
+app.delete('/sponsors/:Id', (req, res) => {
+  console.log('Entered DELETE endpoint');
+  const userId = req.header('userId');
+  if (!userId) {
+    return res.status(400).json({ message: 'userId header is required' });
+  }
+  const Id = req.params.Id;
+  if (!Id) {
+    return res.status(400).json({ message: 'Sponsor Id is required' });
+  }
+  const query = 'DELETE FROM sponsors WHERE Id = ?';
+  const queryParams = [Id];
+  connection.query(query, queryParams, (error, results) => {
+    if (error) {
+      console.error('Error deleting sponsor:', error);
+      return res.status(500).json({ message: 'Internal Server Error' });
+    }
+    if (results.affectedRows === 0) {
+      return res.status(404).json({ message: 'Sponsor not found' });
+    }
+    res.status(200).json({ message: 'Sponsor deleted successfully' });
+  });
+});
 
 // add and display partners
 app.post('/partners', images.single('photo'), async (req, res) => {
@@ -1207,15 +1226,17 @@ app.post('/partners', images.single('photo'), async (req, res) => {
       return res.status(400).json({ message: 'Partner addition failed. Image is required.' });
     }
     const imagePath = req.file.path;
+    console.log(imagePath);
     // Read the uploaded file and convert it to base64
     const data = await fs.promises.readFile(imagePath);
-    const base64Photo = data.toString('base64');
+    const base64Photo =  data.toString('base64');
     const query = 'INSERT INTO partners (id, name, link, photo) VALUES (?, ?, ?, ?)';
     const id = uuid.v4().substring(0, 8);
 
     const queryParams = [id, name, link, base64Photo];
     connection.query(query, queryParams, (err) => {
       console.log(imagePath);
+      console.log(req.body['photo']);
       if (err) {
         console.error('Error adding partner:', err);
         return res.status(500).json({ message: 'Internal Server Error' });
