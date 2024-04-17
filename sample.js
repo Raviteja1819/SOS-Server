@@ -11,7 +11,6 @@ const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 const fs = require('fs');
-const fsExtra = require('fs-extra')
 const { sin, cos, sqrt, atan2 } = require('mathjs');
 
 function degreesToRadians(degrees) {
@@ -82,11 +81,6 @@ if (cluster.isMaster) {
     }
     console.log('Connected to MySQL database.');
   });
-
-  // Middleware to parse JSON bodies
-  app.use(express.json());
-  const server = http.createServer(app);
-const io = new Server(server);
 //realtime voice recording
 const recordingsDirectory = path.join(__dirname, 'recordings');
 if (!fs.existsSync(recordingsDirectory)) {
@@ -95,10 +89,21 @@ if (!fs.existsSync(recordingsDirectory)) {
 
 // Serve static files from 'public' directory (optional)
 app.use(express.static('public'));
+  // Middleware to parse JSON bodies
+  app.use(express.json());
+  const server = http.createServer(app);
+const io = new Server(server,{
+  cors:{
+    origin:'*'
+  }
+});
+
 
 // Handle socket connections
 io.on('connection', (socket) => {
     console.log('A user connected:', socket.id);
+
+    socket.emit('greet', 'Hello');
 
     // Listen for 'voice' events
     socket.on('voice', (data) => {
@@ -134,6 +139,8 @@ io.on('connection', (socket) => {
         console.log('A user disconnected:', socket.id);
     });
 });
+
+
 
   // Generating the userID
   function generateUserId() {
@@ -1571,7 +1578,7 @@ function queryDatabase(sql, params = []) {
 }
 
 // Start the server
-app.listen(3000, () => {
+server.listen(3000, () => {
   console.log(`Server is running on port 3000`);
 });
 }
