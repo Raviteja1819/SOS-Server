@@ -11,7 +11,7 @@ const bcrypt = require ('bcrypt');
 const bodyParser = require('body-parser');
 const mysql = require('mysql2');
 const fs = require('fs');
-const { sin, cos, sqrt, atan2 } = require('mathjs');
+const { sin, cos, sqrt, atan2, log } = require('mathjs');
 
 function degreesToRadians(degrees) {
   return degrees * Math.PI / 180;
@@ -355,8 +355,10 @@ app.put('/contacts/:id', (req, res) => {
                 gender:user.gender,
                 coordinatesLatitude:user.coordinatesLatitude,
                 coordinatesLongitude:user.coordinatesLongitude,
-                photo: user.photo
+                photo: user.photo,
+                certified: user.certified == 0 ? false:true
             };
+         
             res.status(200).json({ message: 'Login successful', user: userWithoutPasskey });
         } else {
                 // Passwords don't match
@@ -365,6 +367,14 @@ app.put('/contacts/:id', (req, res) => {
         });
     });
 });
+
+app.get('/isCertified/:userId',(res,req)=>{
+  var userId = res.params.userId;
+  const query = 'SELECT certified FROM users WHERE userId = ?';
+connection.query(query,[userId],(err,result)=>{
+  req.send({'certified':result[0]['certified'] == 0 ? false:true})
+})
+})
 //change password
 const bcrypt = require('bcrypt');
 
@@ -564,7 +574,9 @@ app.post('/bloodcheckup', validateFields, (req, res, next) => {
       );
     }
   );
+  connection.query('UPDATE users SET certified = 1 WHERE userId = ?',[userId]);
 });
+
 
 // list of all bloodcheckups
 app.get('/bloodcheckup/:id?', (req, res) => {
@@ -1305,6 +1317,100 @@ app.get('/partners/:id?', (req, res) => {
       // Return all partners as a JSON response
       res.status(200).json(results);
     });
+  }
+});
+// update partners
+app.put('/partners', (req, res) => {
+  try {
+      // Extract the userId from request headers
+      const userId = req.header('userId');
+      if (!userId) {
+          return res.status(400).json({ message: 'userId header is required' });
+      }
+
+      // Extract the partner ID from request body
+      const id = req.body.Id;
+      console.log(req.body);
+      if (!id) {
+          return res.status(400).json({ message: 'Id parameter is required' });
+      }
+
+      const { name, link } = req.body;
+      if (!name || !link) {
+          return res.status(400).json({ message: 'All fields are required' });
+      }
+      
+      const query = `
+          UPDATE partners
+          SET name = ?, link = ?
+          WHERE id = ?
+      `;
+
+      const queryParams = [name, link, id];
+
+      connection.query(query, queryParams, (err, results) => {
+          if (err) {
+              console.error('Error updating partners:', err.message);
+              return res.status(500).json({ message: 'Internal Server Error' });
+          }
+
+          if (results.affectedRows === 0) {
+              return res.status(404).json({ message: 'Partner not found' });
+          }
+
+          res.status(200).json({ message: 'Partner updated successfully' });
+      });
+  } catch (err) {
+      console.error('Error:', err.message);
+      res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+
+
+//update sponsors
+app.put('/sponsors', (req, res) => {
+  try {
+    // Extract the userId from request headers
+    const userId = req.header('userId');
+    if (!userId) {
+      return res.status(400).json({ message: 'userId header is required' });
+    }
+
+    // Extract the sponsor ID from request body
+    const id = req.body.Id;
+    console.log(req.body);
+    if (!id) {
+      return res.status(400).json({ message: 'id parameter is required' });
+    }
+
+    const { firstName, lastName, designation } = req.body;
+    if (!firstName || !lastName || !designation) {
+      return res.status(400).json({ message: 'All fields are required' });
+    }
+
+    const query = `
+      UPDATE sponsors
+      SET firstName = ?, lastName = ?, designation = ?
+      WHERE id = ?
+    `;
+
+    const queryParams = [firstName, lastName, designation, id];
+
+    connection.query(query, queryParams, (err, results) => {
+      if (err) {
+        console.error('Error updating sponsor:', err.message);
+        return res.status(500).json({ message: 'Internal Server Error' });
+      }
+
+      if (results.affectedRows === 0) {
+        return res.status(404).json({ message: 'Sponsor not found' });
+      }
+
+      res.status(200).json({ message: 'Sponsor updated successfully' });
+    });
+  } catch (err) {
+    console.error('Error:', err.message);
+    res.status(500).json({ message: 'Internal Server Error' });
   }
 });
 
