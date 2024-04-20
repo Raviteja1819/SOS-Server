@@ -81,67 +81,33 @@ if (cluster.isMaster) {
     }
     console.log('Connected to MySQL database.');
   });
-//realtime voice recording
-const recordingsDirectory = path.join(__dirname, 'recordings');
-if (!fs.existsSync(recordingsDirectory)) {
-    fs.mkdirSync(recordingsDirectory);
-}
-
-// Serve static files from 'public' directory (optional)
 app.use(express.static('public'));
-  // Middleware to parse JSON bodies
   app.use(express.json());
   const server = http.createServer(app);
-const io = new Server(server,{
-  cors:{
-    origin:'*'
-  }
-});
-
-
-// Handle socket connections
-io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
-
-    socket.emit('greet', 'Hello');
-
-    // Listen for 'voice' events
-    socket.on('voice', (data) => {
-        console.log('Received voice stream from:', socket.id);
-
-        // Extract the user ID and voice data from the event
-        const { userId, voiceStream } = data;
-
-        // Create a readable stream from the voice data
-        const voiceBuffer = Buffer.from(voiceStream);
-
-        // Create a file name based on the user ID and current timestamp
-        const fileName = `${userId}_${Date.now()}.webm`; // Adjust the file extension as needed
-
-        // Define the file path where the recording will be saved
-        const filePath = path.join(recordingsDirectory, fileName);
-
-        // Save the voice recording to the file
-        fs.writeFile(filePath, voiceBuffer, (err) => {
-            if (err) {
-                console.error('Error saving voice recording:', err);
-                socket.emit('uploadError', { message: 'Error saving voice recording' });
-            } else {
-                console.log('Voice recording saved successfully:', filePath);
-                // Send the file path back to the client
-                socket.emit('uploadSuccess', { filePath });
-            }
-        });
-    });
-
-    // Handle disconnect
-    socket.on('disconnect', () => {
-        console.log('A user disconnected:', socket.id);
-    });
-});
-
-
-
+  const io = new Server(server, {
+    cors: {
+      origin: '*',
+    },
+  });
+  io.on('connection', (userSocket) => {
+    console.log('connected');
+    userSocket.on('toServer', (data) => {
+      console.log(data);
+      const { buffer, userId } = data;
+       userSocket.emit(userId,buffer); 
+      // userSocket.emit(userId,{"lat":latitude,"lng":longitude});
+    });  
+    userSocket.on('listenToEmergency',(data)=>{
+      const {userId,lat,lng} = data;
+      console.log(data);
+      connection.query('UPDATE emergency SET coordinatesLatitude=? ,coordinatesLongitude=? WHERE userId=?',[lat,lng,userId]);
+      console.log(userId);
+    })
+    connection.query('SELECT * FROM emergency WHERE status="pending"',(err,result)=>{
+      console.log(result);
+      userSocket.emit("listenLocations",result)
+     })
+  });
   // Generating the userID
   function generateUserId() {
     const timestamp = Date.now().toString(36);
@@ -370,6 +336,7 @@ app.put('/contacts/:id', (req, res) => {
 
 app.get('/isCertified/:userId',(res,req)=>{
   var userId = res.params.userId;
+  console.log(userId);
   const query = 'SELECT certified FROM users WHERE userId = ?';
 connection.query(query,[userId],(err,result)=>{
   req.send({'certified':result[0]['certified'] == 0 ? false:true})
@@ -1043,7 +1010,7 @@ app.get('/callback/:id?', (req, res) => {
 });
 //list af all users
 app.get('/users/:userId?',(req,res)=>{
-  console.log('entered users herer');
+  console.log('entered users here');
   const userId = req.header('userId');
 console.log(userId);
   if (!userId){
@@ -1616,7 +1583,7 @@ app.post('/update-status', (req, res) => {
       console.error(`Error updating status in ${tableName}:`, error);
       return res.status(500).send('Internal Server Error');
     }
-    res.status(200).send('Status updated successfully');
+    res.status(200).json({message: 'Status updated successfully'});
   });
 });
 
@@ -1682,6 +1649,147 @@ function queryDatabase(sql, params = []) {
     });
   });
 }
+
+// all solved cases
+app.get('/solved-cases', (req, res) => {
+  const tables = ['reportIssue', 'callbackRequest', 'bloodRequirement', 'bloodCheckup', 'anonymousReport', 'bloodEmergency'];
+  const fetchSolvedCasesFromTable = (table) => {
+    return new Promise((resolve, reject) => {
+      let query = `SELECT * FROM ${table} WHERE status = 'solved'`;
+      // switch (table) {
+      //   case 'reportIssue':
+      //   case 'callbackRequest':
+      //   case 'bloodRequirement':
+      //   case 'bloodCheckup':
+      //   case 'anonymousReport':
+      //   case 'bloodEmergency':
+      //     query = `SELECT * FROM ${table} WHERE status = 'solved'`;
+      //     break;
+      //   default:
+      //     return reject(`Unknown table: ${table}`);
+      // }
+      connection.query(query, (err, results) => {
+        if (err) {
+          return reject(err);
+        }
+        resolve(results);
+      });
+    });
+  };
+  const fetchAllSolvedCases = async () => {
+    try {
+      const allResults = await Promise.all(tables.map(fetchSolvedCasesFromTable));
+      const allSolvedCases = allResults.flat();
+      res.json(allSolvedCases);
+    } catch (err) {
+      console.error('Error fetching solved cases:', err);
+      res.status(500).json({ error: 'Failed to fetch solved cases' });
+    }
+  };
+  fetchAllSolvedCases();
+});
+
+
+
+// admin signup
+
+function generateUserId() {
+  return Math.random().toString(36).substring(2, 6).toUpperCase();
+}
+
+// Admin sign-up endpoint
+app.post('/admin-signup', async (req, res) => {
+  const { firstName, lastName, email, mobileNumber, designation, loginTime, password } = req.body;
+  console.log(req.body);
+  if (!firstName || !lastName || !email  || !designation || !mobileNumber || !loginTime || !password ) {
+    return res.status(400).send('All fields are required');
+  }
+  const userId = generateUserId();
+  const hashedPassword = await bcrypt.hash(password, 10);
+  const query = `INSERT INTO admin (userId, firstName, lastName, email, mobileNumber, designation, loginTime, passkey)
+                 VALUES (?, ?, ?, ?, ?, ?, ?, ?)`;
+  connection.query(query, [userId, firstName, lastName, email, mobileNumber, designation, loginTime, hashedPassword], (error, results) => {
+      if (error) {
+          console.error('Error inserting admin data:', error);
+          return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      res.status(201).json({ message: 'Admin user created successfully', userId: userId });
+  });
+});
+
+//admin login
+app.post('/admin-login', (req, res) => {
+  const { email, password } = req.body;
+  if(!email ||!password){
+    res.send("all fields are required");
+  }
+  
+  const query = `SELECT * FROM admin WHERE email = ? `;
+  connection.query(query, [email], async (error, results) => {
+      if (error) {
+          console.error('Error querying admin data:', error);
+          return res.status(500).json({ message: 'Internal Server Error' });
+      }
+      if (results.length === 0) {
+          return res.status(401).json({ message: 'Invalid email' });
+      }
+
+      const admin = results[0];
+
+      const passwordMatch = await bcrypt.compare(password, admin.passkey);
+      if (!passwordMatch) {
+          return res.status(401).json({ message: 'Invalid password' });
+      }
+      const { userId, firstName, lastName, email, mobileNumber, designation, loginTime } = admin;
+      console.log('Admin Details:', {
+          userId,
+          firstName,
+          lastName,
+          email,
+          mobileNumber,
+          designation,
+          loginTime
+      });
+      res.json({ message: 'Login successful', userId, firstName, lastName, email, mobileNumber, designation, loginTime });
+  });
+});
+
+// emergency-cases
+
+app.post('/emergency', (req, res) => {
+  try {
+      const { userId,coordinatesLatitude, coordinatesLongitude } = req.body;
+      console.log(req.body);
+      if (!userId || !coordinatesLatitude || !coordinatesLongitude) {
+          return res.status(400).json({ message: 'userId, latitude, and longitude are required' });
+      }
+      const query = 'INSERT INTO emergency (userId, coordinatesLatitude, coordinatesLongitude) VALUES (?, ?, ?)';
+      const queryParams = [userId, coordinatesLatitude, coordinatesLongitude];
+      connection.query(query, queryParams, (err, results) => {
+          if (err) {
+              console.error('Error inserting emergency data:', err.message);
+              return res.status(500).json({ message: 'Internal Server Error' });
+          }
+          res.status(201).json({ message: 'Emergency data stored successfully' });
+      });
+  } catch (err) {
+      console.error('Error:', err.message);
+      res.status(500).json({ message: 'Internal Server Error' });
+  }
+});
+// get all the emergency data
+app.get('/emergency', (req, res) => {
+  const query = 'SELECT userId, coordinatesLatitude AS lat, coordinatesLongitude AS lng FROM emergency WHERE status = "pending"';    connection.query(query, [], (err, results) => {
+      if (err) {
+          console.error('Error fetching pending emergency data:', err.message);
+          return res.status(500).json({ error: 'Internal Server Error' });
+      }
+      if (results.length === 0) {
+          return res.status(404).json({ message: 'No pending emergency data found' });
+      }
+      res.status(200).json(results);
+  });
+});
 
 // Start the server
 server.listen(3000, () => {
