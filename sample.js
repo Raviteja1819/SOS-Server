@@ -72,9 +72,10 @@ if (cluster.isMaster && false) {
 
   // mysql connection
   const connection = mysql.createConnection({
-    host: '45.112.49.217',
+    host: '192.168.1.6',
     user: 'root',
-    password: 'Cyclotech@7719',
+    password: 'Ravi@1819',
+    port:3307,
     database: 'aid'
   });
   // Connect to MySQL

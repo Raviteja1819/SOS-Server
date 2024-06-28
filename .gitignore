@@ -1,9 +1,4 @@
-/node_modules
-npm-debug.log
-.DS_Store
-/*.env
-/firebase/account-creds.json
-firebase\account-creds.json
-port.js
-images
-recordings
+node_modules
+.git
+.vscode
+*.log
